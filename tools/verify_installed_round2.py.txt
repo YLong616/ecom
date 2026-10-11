@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+"""对「安装版」ecom（site-packages）验收第二轮四项改动。"""
+import os
+import subprocess
+import sys
+import time
+import tkinter as tk
+import tkinter.messagebox as mb
+
+import ecom
+
+print("package:", ecom.__file__)
+assert "site-packages" in ecom.__file__, "必须是安装版"
+from ecom.app import EcomApp  # noqa: E402
+
+mb.showinfo = lambda *a, **k: None
+ok = []
+
+root = tk.Tk()
+root.withdraw()
+app = EcomApp(root)
+root.update()
+
+# ③ 顶部菜单入口
+print("① 顶部入口文案 =", repr(app.mode_btn.cget("text")))
+ok.append(app.mode_btn.cget("text") == "串口模式切换")
+app._switch_mode("stress")
+root.update()
+ok.append(app.mode_btn.cget("text") == "串口模式切换")
+print("   切到压力模式后 =", repr(app.mode_btn.cget("text")))
+
+# ④ 预期结果对话框
+panel = app._get_stress_view()
+root.update()
+panel._edit_expected(0)
+root.update()
+dlg = [w for w in panel.winfo_children() if isinstance(w, tk.Toplevel)][0]
+ex = dlg._example_text
+texts = {m: None for m in ("contains", "regex", "exact")}
+for m in texts:
+    dlg._mode_var.set(panel._t("stress_match_" + m))
+    dlg._refresh_example()
+    dlgs_txt = ex.get("1.0", "end-1c")
+    texts[m] = dlgs_txt
+    print("   示例[%s] %d 行, 含字面量\\r\\n=%s, 行首=%r" %
+          (m, len(dlgs_txt.splitlines()), "\\r\\n" in dlgs_txt, dlgs_txt[:28]))
+ok.append(all(t and "\\r\\n" in t and len(t.splitlines()) == 6 for t in texts.values()))
+ok.append(len(set(texts.values())) == 3)
+print("   示例区 height=%s（输入框 8，上窄下宽）" % ex.cget("height"))
+dlg.destroy()
+
+# ①② 复制：不阻塞、不刷输入框
+w = app.output
+w.delete("1.0", "end")
+w.insert("1.0", "[2026-09-29_19:00:00:000]  RX  OK\n" * 4000)
+root.update_idletasks()
+want = len(w.get("1.0", "end-1c"))
+t0 = time.time()
+app._copy_all(w)
+elapsed = time.time() - t0
+ok.append(elapsed < 0.5)
+print("② 复制全部阻塞 %.3fs（%d 字符）" % (elapsed, want))
+
+READER = ("import ctypes, ctypes.wintypes as wt\n"
+          "u=ctypes.windll.user32; k=ctypes.windll.kernel32; H=ctypes.c_void_p\n"
+          "u.OpenClipboard.argtypes=[H]; u.OpenClipboard.restype=wt.BOOL\n"
+          "u.GetClipboardData.argtypes=[ctypes.c_uint]; u.GetClipboardData.restype=H\n"
+          "k.GlobalLock.argtypes=[H]; k.GlobalLock.restype=H\n"
+          "u.OpenClipboard(None); h=u.GetClipboardData(13)\n"
+          "s=ctypes.wstring_at(k.GlobalLock(h)) if h else ''\n"
+          "u.CloseClipboard(); print(len(s))\n")
+
+
+def ext():
+    r = subprocess.run([sys.executable, "-c", READER], stdout=subprocess.PIPE, timeout=60)
+    return int(r.stdout.decode().strip()) if r.returncode == 0 else -1
+
+
+got = -1
+end = time.time() + 20
+while time.time() < end and got != want:
+    root.update()
+    got = ext()
+    time.sleep(0.05)
+print("   外部进程读到 %d / 期望 %d" % (got, want))
+ok.append(got == want)
+
+typed = app.input.get("1.0", "end-1c")
+print("① 输入框内容 = %r" % typed[:40])
+ok.append(typed.strip() == "")
+
+app._poll_interval_ms = 10 ** 9
+root.destroy()
+print("RESULT:", "PASS" if all(ok) else "FAIL", ok)
+sys.exit(0 if all(ok) else 1)

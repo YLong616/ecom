@@ -1,0 +1,413 @@
+# -*- coding: utf-8 -*-
+"""UI 走查 v12 回归：③ 顶部模式入口固定为「串口模式切换」；④ 预期结果对话框上窄示例 + 下宽输入。
+
+运行（项目根目录 projects/eCOM 下）：
+    python -m unittest tests.test_ui_round2 -v
+"""
+
+import os
+import sys
+import time
+import tkinter as tk
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from ecom.app import EcomApp
+except Exception as exc:  # 无 tkinter 环境
+    EcomApp = None
+    _import_error = exc
+
+from ecom.serial_core import SerialCore  # noqa: E402
+from ecom.stress_model import MATCH_MODES  # noqa: E402
+
+
+def _texts(widget):
+    """递归收集 tk.Text 控件。"""
+    out = []
+    for child in widget.winfo_children():
+        if isinstance(child, tk.Text):
+            out.append(child)
+        out.extend(_texts(child))
+    return out
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestModeEntryLabel(unittest.TestCase):
+    """③ 顶部菜单入口文案：固定「串口模式切换」，不再随当前模式改名。"""
+
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.root.update()
+
+    def tearDown(self):
+        self.app._poll_interval_ms = 10 ** 9
+        try:
+            self.app._set_language("zh")     # 恢复默认语言（不落盘，仅内存）
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def test_label_fixed_across_modes(self):
+        expect_zh = "串口模式切换"
+        self.assertEqual(self.app.mode_btn.cget("text"), expect_zh)
+        # 菜单里的两个选项仍是「模式名」，用来表达要切到哪个模式
+        labels = [self.app.mode_menu.entrycget(i, "label")
+                  for i in range(2)]
+        self.assertEqual(labels, ["AT 模式", "压力模式"])
+        # 切到压力模式后入口文案不变
+        self.app._switch_mode("stress")
+        self.root.update()
+        self.assertEqual(self.app.mode_btn.cget("text"), expect_zh)
+        # 切回 AT 仍不变
+        self.app._switch_mode("at")
+        self.root.update()
+        self.assertEqual(self.app.mode_btn.cget("text"), expect_zh)
+
+    def test_label_follows_language(self):
+        self.app._set_language("en")
+        self.root.update()
+        self.assertEqual(self.app.mode_btn.cget("text"), "Serial Mode Switch")
+        self.app._set_language("zh")
+        self.root.update()
+        self.assertEqual(self.app.mode_btn.cget("text"), "串口模式切换")
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestExpectedDialogLayout(unittest.TestCase):
+    """④ 预期结果对话框：上窄示例（随匹配模式联动）+ 下宽输入框。"""
+
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.root.update()
+        self.panel = self.app._get_stress_view()
+        self.root.update()
+
+    def tearDown(self):
+        self.app._poll_interval_ms = 10 ** 9
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def test_stress_output_uses_same_copy_path(self):
+        """压力模式输出框与 AT 模式共用 app 的复制实现 —— 所以「不再往输入框写
+        已复制 N 字符」对压力模式同样生效。"""
+        from tests.test_clipboard import _clipboard_usable
+        if not _clipboard_usable():
+            self.skipTest("剪贴板不可用（被占用 / 会话或沙箱限制），跳过")
+        import tkinter.messagebox as mb
+        from unittest import mock
+        w = self.panel.output
+        self.assertTrue(w.bind("<<Copy>>"), "压力输出框应绑定 app 的复制处理")
+        self.assertTrue(w.bind("<<Paste>>"), "压力输出框应拦截粘贴")
+        w.delete("1.0", "end")
+        w.insert("1.0", "[2026-09-29_19:00:00:000]  RX  OK\n" * 500)
+        self.root.update_idletasks()
+        want = len(w.get("1.0", "end-1c"))
+        with mock.patch("tkinter.messagebox.showinfo", lambda *a, **k: None):
+            t0 = __import__('time').time()
+            self.app._copy_all(w)
+            elapsed = __import__('time').time() - t0
+        self.assertLess(elapsed, 0.5)
+        from tests.test_clipboard import _external_read
+        time = __import__('time')
+        end = time.time() + 30          # 覆盖后台写入 + 偶发重试的一次
+        n = -1
+        while time.time() < end:            # 等后台写入落地
+            self.root.update()
+            n, _ = _external_read()
+            if n == want:
+                break
+            time.sleep(0.05)
+        self.assertEqual(n, want,
+                         '压力输出框的复制内容不完整：%r'
+                         % self.app.input.get("1.0", "end-1c")[:80])
+        self.assertEqual(self.app.input.get("1.0", "end-1c").strip(), "",
+                         "压力模式复制后输入框不应有提示")
+
+    def _open_dialog(self):
+        self.panel._edit_expected(0)
+        self.root.update()
+        dlgs = [w for w in self.panel.winfo_children() if isinstance(w, tk.Toplevel)]
+        self.assertEqual(len(dlgs), 1, "预期结果对话框应当只有 1 个")
+        return dlgs[0]
+
+    def test_narrow_example_above_wide_input(self):
+        """输入区被拆成两块：上=示例（只读、窄），下=输入框（可编辑、宽、随窗口拉伸）。"""
+        dlg = self._open_dialog()
+        try:
+            ex = dlg._example_text
+            self.assertEqual(str(ex.cget("state")), "disabled", "示例区应只读")
+            # 输入框 = 对话框里唯一可编辑的 Text
+            editable = [t for t in _texts(dlg) if str(t.cget("state")) != "disabled"]
+            self.assertEqual(len(editable), 1)
+            inp = editable[0]
+            self.assertLess(int(ex.cget("height")), int(inp.cget("height")),
+                            "上半（示例）应比下半（输入框）窄")
+            # 无头环境下 winfo_rooty 不可用（未映射窗口布局未算），改断言网格行序
+            ex_row = int(ex.master.grid_info()["row"])
+            in_row = int(inp.master.grid_info()["row"])
+            self.assertLess(ex_row, in_row, "示例区应排在输入框上方")
+            # 只有输入框所在行随窗口拉伸（下宽）
+            rows = dlg.grid_rowconfigure(in_row)
+            self.assertEqual(int(rows["weight"]), 1, "输入区应随窗口拉伸")
+            self.assertEqual(int(dlg.grid_rowconfigure(ex_row)["weight"]), 0,
+                             "示例区不应抢拉伸空间")
+        finally:
+            dlg.destroy()
+
+    def test_example_follows_match_mode(self):
+        """示例区内容 = 当前语言下该匹配模式的文案，且随模式切换实时变化。"""
+        from ecom import i18n
+        dlg = self._open_dialog()
+        try:
+            ex = dlg._example_text
+            seen = {}
+            for m in MATCH_MODES:
+                dlg._mode_var.set(self.panel._t("stress_match_" + m))
+                dlg._refresh_example()
+                self.root.update()
+                content = ex.get("1.0", "end-1c")
+                seen[m] = content
+                self.assertEqual(content,
+                                 i18n.get(self.app.lang, "stress_ex_" + m))
+                self.assertTrue(content.strip(), "示例内容不应为空: %s" % m)
+                self.assertEqual(len(content.splitlines()), 6, "示例应为 6 行")
+                self.assertNotIn("\r", content, "示例里不能有真 CR（会被 Text 当换行）")
+            # 三种模式互不相同，且各自给出该模式专属的样例与写法
+            self.assertEqual(len(set(seen.values())), len(MATCH_MODES))
+            self.assertIn("ABCD123456", seen["contains"])
+            self.assertIn("ABCD123456", seen["regex"])
+            self.assertIn("\\r\\n", seen["regex"])   # 正则示例必须教转义写法
+            self.assertIn("\\s", seen["regex"])
+            self.assertIn("(?m)", seen["regex"])
+            self.assertIn("ABCD123456", seen["exact"])
+            self.assertIn("*", seen["exact"])            # 全等无通配符的示例
+            # 防泄密：示例必须是虚构数据，不得出现任何真实模组回包/地址/厂商串
+            for m in MATCH_MODES:
+                for word in ("+QSTAAPINFO", "+QVERSION", "+QGETIP", "FCMA",
+                             "10.1.2.3", "Quectel"):
+                    self.assertNotIn(word, seen[m], "示例里出现真实数据：%s" % word)
+                first = seen[m].splitlines()[0]
+                self.assertTrue(first.startswith("假设实际接收内容")
+                                or first.startswith("Assumed received text"),
+                                "首行应以「假设实际接收内容」开头：%r" % first)
+        finally:
+            dlg.destroy()
+
+
+
+
+class _FakeCore:
+    """替身串口：is_open=True；write 记录；drain 依次吐出预置的接收块。"""
+
+    def __init__(self, chunks=None):
+        self.chunks = list(chunks or [])
+        self.written = []
+
+    @property
+    def is_open(self):
+        return True
+
+    def write(self, data):
+        self.written.append(data)
+        return len(data)
+
+    def drain(self):
+        if self.chunks:
+            return [(SerialCore.RX_DATA, self.chunks.pop(0))]
+        return []
+
+    def list_ports(self):
+        return []
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestExpectedDialogTestButton(unittest.TestCase):
+    """预期结果对话框的「测试」：默认带出该行 AT 命令、可改、发送、即时比对、绿/红渲染。"""
+
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.root.update()
+        self.panel = self.app._get_stress_view()
+        self.root.update()
+        self.panel._rows[0].txt = "AT+CSUB"
+        for v in self.panel._row_vars:
+            if v.get("gidx") == 0:
+                v["txt"].set("AT+CSUB")
+
+    def tearDown(self):
+        self.app._poll_interval_ms = 10 ** 9
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def _open_dialog(self):
+        self.panel._edit_expected(0)
+        self.root.update()
+        dlgs = [w for w in self.panel.winfo_children() if isinstance(w, tk.Toplevel)]
+        self.assertEqual(len(dlgs), 1)
+        return dlgs[0]
+
+    def _pump_until(self, cond, timeout=8.0):
+        end = time.time() + timeout
+        while time.time() < end:
+            self.root.update()
+            if cond():
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _verdict(self, dlg):
+        return bool(dlg._test_res.tag_ranges("ok")) or bool(dlg._test_res.tag_ranges("fail"))
+
+    def test_test_section_defaults_and_colors(self):
+        dlg = self._open_dialog()
+        try:
+            # 默认带出该行的 AT 命令，且可编辑
+            self.assertEqual(dlg._test_at_var.get(), "AT+CSUB")
+            self.assertEqual(str(dlg._test_btn.cget("state")), "normal")
+            res = dlg._test_res
+            self.assertEqual(str(res.cget("state")), "disabled")
+            # 成功=绿、失败=红（用同一套调色板）
+            self.assertEqual(res.tag_cget("ok", "foreground"), self.panel.P["success"])
+            self.assertEqual(res.tag_cget("fail", "foreground"), self.panel.P["danger"])
+            self.assertNotEqual(self.panel.P["success"], self.panel.P["danger"])
+        finally:
+            dlg.destroy()
+
+    def test_test_button_matches_and_renders(self):
+        """返回 +QCSUB: V04 / OK：预期 OK -> 绿；预期 NOT_THERE -> 红。"""
+        resp = b"AT+CSUB\r\n+QCSUB: V04\r\nOK\r\n"
+        # ---- 命中：绿 ----
+        self.panel._rows[0].expected = "OK"
+        dlg = self._open_dialog()
+        try:
+            fake = _FakeCore([resp])          # 对话框打开后再装替身，避免被轮询先取走
+            self.panel.core = fake
+            dlg._test_btn.invoke()
+            self.assertTrue(self._pump_until(lambda: self._verdict(dlg)), "测试未在超时内给出结论")
+            body = dlg._test_res.get("1.0", "end-1c")
+            self.assertTrue(dlg._test_res.tag_ranges("ok"), "命中时应当用绿色标签: %r" % body)
+            self.assertFalse(dlg._test_res.tag_ranges("fail"))
+            self.assertIn("+QCSUB: V04", body, "应当显示返回结果原文")
+            self.assertEqual(fake.written, [b"AT+CSUB\r\n"], "应按 ASCII + CR-LF 发送")
+            print("[test-btn] PASS 渲染: %r" % body.replace("\n", " | "))
+        finally:
+            dlg.destroy()
+
+        # ---- 不命中：红 ----
+        self.panel._rows[0].expected = "NOT_THERE"
+        dlg = self._open_dialog()
+        try:
+            fake = _FakeCore([resp])
+            self.panel.core = fake
+            dlg._test_btn.invoke()
+            self.assertTrue(self._pump_until(lambda: self._verdict(dlg)), "测试未在超时内给出结论")
+            body = dlg._test_res.get("1.0", "end-1c")
+            self.assertTrue(dlg._test_res.tag_ranges("fail"), "未命中时应当用红色标签: %r" % body)
+            self.assertFalse(dlg._test_res.tag_ranges("ok"))
+            print("[test-btn] FAIL 渲染: %r" % body.replace("\n", " | "))
+        finally:
+            dlg.destroy()
+
+    def test_test_without_port_reports_error(self):
+        """串口没开时点测试：给出红色错误，不发数据。"""
+        self.panel._rows[0].expected = "OK"
+        dlg = self._open_dialog()
+        try:
+            class _Closed(_FakeCore):
+                @property
+                def is_open(self):
+                    return False
+
+            self.panel.core = _Closed()
+            dlg._test_btn.invoke()
+            self.root.update()
+            body = dlg._test_res.get("1.0", "end-1c")
+            self.assertTrue(dlg._test_res.tag_ranges("fail"))
+            self.assertIn(self.panel._t("stress_no_port"), body)
+            self.assertEqual(self.panel.core.written, [])
+        finally:
+            dlg.destroy()
+
+    def test_test_area_target_and_fill_expected(self):
+        """① 动态提示显示发送方式/串口；② 收到返回后「用返回填充预期」可用并能填入。"""
+        resp = b"AT+CSUB\r\n+QCSUB: V04\r\nOK\r\n"
+        self.panel._rows[0].expected = "OK"
+        dlg = self._open_dialog()
+        try:
+            tgt = dlg._test_target.cget("text")
+            self.assertIn("ASCII", tgt)
+            self.assertIn(self.panel._t("stress_test_port_closed"), tgt)
+            self.assertEqual(str(dlg._test_fill.cget("state")), "disabled")
+            self.panel.core = _FakeCore([resp])
+            dlg._test_btn.invoke()
+            self.assertTrue(self._pump_until(lambda: self._verdict(dlg)),
+                            "测试未在超时内给出结论")
+            # 结论里带上匹配模式名
+            body = dlg._test_res.get("1.0", "end-1c")
+            self.assertIn(self.panel._t("stress_match_contains"), body)
+            # 用返回填充预期（全等模式尤其实用）
+            self.assertEqual(str(dlg._test_fill.cget("state")), "normal")
+            dlg._test_fill.invoke()
+            self.root.update()
+            self.assertEqual(dlg._expected_text.get("1.0", "end-1c").strip(),
+                             resp.decode().strip())
+        finally:
+            dlg.destroy()
+    def test_mode_combo_shows_label_and_keeps_mode(self):
+        """下拉显示本地化标签；不动下拉直接保存，匹配模式必须保持不变（防静默降级）。"""
+        from ecom.stress_model import MATCH_REGEX
+        self.panel._rows[0].match_mode = MATCH_REGEX
+        self.panel._rows[0].expected = "X"
+        dlg = self._open_dialog()
+        try:
+            self.assertEqual(dlg._mode_var.get(), self.panel._t("stress_match_regex"))
+            dlg._ok()          # 直接点「保存」（没碰下拉）
+        finally:
+            if dlg.winfo_exists():
+                dlg.destroy()
+        self.assertEqual(self.panel._rows[0].match_mode, MATCH_REGEX,
+                         "未动下拉不该把匹配模式改掉")
+    def test_expected_dialog_buttons_two_colors(self):
+        """「保存」「退出」两个按钮用两种不同的背景色。"""
+        from tkinter import ttk
+        dlg = self._open_dialog()
+        try:
+            found = {}
+
+            def walk(w):
+                for c in w.winfo_children():
+                    if isinstance(c, ttk.Button):
+                        st = str(c.cget("style"))
+                        if st in ("ExpSave.TButton", "ExpExit.TButton"):
+                            found[st] = c
+                    walk(c)
+
+            walk(dlg)
+            self.assertIn("ExpSave.TButton", found, "保存按钮应有专属样式")
+            self.assertIn("ExpExit.TButton", found, "退出按钮应有专属样式")
+            sty = ttk.Style(dlg)
+            bg_save = sty.lookup("ExpSave.TButton", "background")
+            bg_exit = sty.lookup("ExpExit.TButton", "background")
+            self.assertTrue(bg_save)
+            self.assertTrue(bg_exit)
+            self.assertNotEqual(bg_save, bg_exit, "两个按钮背景色必须不同")
+            print("[btn] 保存=%s 退出=%s" % (bg_save, bg_exit))
+        finally:
+            dlg.destroy()
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

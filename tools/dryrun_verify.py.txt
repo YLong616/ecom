@@ -1,0 +1,60 @@
+# -*- coding: utf-8 -*-
+"""发布手册干跑（续）：① sdist 解包 -> compileall -> 跑测试；② wheel 试装到临时目录 -> import。"""
+import io
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import zipfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PY = sys.executable
+WHL = os.path.join(ROOT, "dist", "ecom_serial_tool-0.2.0-py3-none-any.whl")
+SDIST = os.path.join(ROOT, "dist", "ecom_serial_tool-0.2.0.tar.gz")
+TMP = tempfile.gettempdir()
+
+# ---------- ① sdist 解包 + 编译 + 测试 ----------
+work = os.path.join(TMP, "ecom_verify")
+shutil.rmtree(work, ignore_errors=True)
+os.makedirs(work, exist_ok=True)
+with tarfile.open(SDIST) as t:
+    t.extractall(work)
+inner = [d for d in os.listdir(work) if d.startswith("ecom_serial_tool")][0]
+work = os.path.join(work, inner)
+print("解包目录:", work)
+print("顶层:", sorted(os.listdir(work))[:12])
+
+r = subprocess.run([PY, "-m", "compileall", "-q", "ecom"], cwd=work, capture_output=True)
+print("compileall:", "OK" if r.returncode == 0 else r.stderr.decode("utf-8", "replace")[:300])
+
+has_tests = os.path.isdir(os.path.join(work, "tests"))
+print("sdist 里是否含 tests/:", has_tests)
+if has_tests:
+    r = subprocess.run([PY, "-m", "unittest", "discover", "tests"], cwd=work, capture_output=True)
+    out = (r.stdout + r.stderr).decode("utf-8", "replace")
+    print("测试:", [l for l in out.splitlines()
+                    if "Ran " in l or l.startswith("OK") or l.startswith("FAILED")])
+
+# ---------- ② wheel 试装到临时目录 + import ----------
+smoke = os.path.join(TMP, "ecom_smoke")
+shutil.rmtree(smoke, ignore_errors=True)
+r = subprocess.run([PY, "-m", "pip", "install", "--quiet", "--no-deps", "--target", smoke, WHL],
+                   capture_output=True)
+print("试装 exit:", r.returncode, r.stderr.decode("utf-8", "replace")[-200:] if r.returncode else "")
+env = dict(os.environ)
+env["PYTHONPATH"] = smoke
+r = subprocess.run([PY, "-c",
+                    "import ecom, ecom.macro, ecom.clipboard, ecom.macro_panel, ecom.stress_panel;"
+                    "print('import OK, 版本', ecom.__version__)"],
+                   capture_output=True, env=env)
+print((r.stdout + r.stderr).decode("utf-8", "replace").strip())
+
+# ---------- ③ wheel 里是否含明文源码 ----------
+with zipfile.ZipFile(WHL) as z:
+    names = z.namelist()
+    print("wheel 文件数:", len(names), "| 含 ecom/docs:", [n for n in names if "docs/" in n])
+    src = z.read("ecom/macro.py").decode("utf-8", "replace")
+    print("wheel 内 ecom/macro.py 前 60 字:", repr(src[:60]))
+    print("wheel 内是否明文（能读到中文注释）:", "宏定义" in src or "def validate_key" in src)

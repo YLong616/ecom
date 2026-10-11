@@ -1,0 +1,162 @@
+# -*- coding: utf-8 -*-
+"""① 版本升到 0.2.0（pyproject 与 ecom/__init__.py 同步）
+   ② 打出「明文源码包」zip 供 Linux 构建发布（白名单进程读明文 -> zip 内容必为明文）
+   ③ 校验：解包 -> 全量 py_compile -> 跑测试；并给出 zip 的 SHA256 与文件清单
+"""
+import hashlib
+import io
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VERSION = "0.2.0"
+BUNDLE = os.path.join(ROOT, "ecom_src_%s_clean.zip" % VERSION)
+
+BUILD_MD = """# 在 Linux 上构建并发布 `ecom-serial-tool %s`
+
+> 本包已由 Windows 侧用白名单进程导出，**所有文件均为明文**（无 DLP 密文），
+> 可直接拷贝/传输到 Linux。`pyproject.toml` 与 `ecom/__init__.py` 的版本已同步为 `%s`。
+
+## 0. 前提
+- Python ≥ 3.8（建议 3.11+）、能联网
+- PyPI 账号 + **API token**（推荐；不要用账号密码）
+- 桌面环境用户需系统包：`sudo apt install python3-tk`（tkinter 不能用 pip 装）
+
+## 1. 先校验包干净、可编译
+```bash
+python3 -m compileall -q ecom tests && echo "全部可编译"
+grep -rn $'\\x00' ecom --include=*.py | head      # 不应有二进制乱码
+```
+
+## 2. 建虚拟环境并装构建工具
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+python -m pip install -U pip build twine
+python -m pip install -r requirements.txt
+```
+
+## 3. 自检（强烈建议）
+```bash
+python -m unittest discover tests          # 期望全部通过
+```
+
+## 4. 构建
+```bash
+rm -rf dist build *.egg-info
+python -m build                             # 产出 dist/*.tar.gz 与 *-py3-none-any.whl
+python -m twine check dist/*                # 必须 PASS
+```
+
+## 5. 试装 + 冒烟
+```bash
+python -m pip install dist/*.whl
+ecom --version                              # 期望：ecom %s
+python -c "import ecom, ecom.macro, ecom.clipboard; print(ecom.__version__)"
+python -m pip uninstall -y ecom-serial-tool
+```
+
+## 6. 上传
+```bash
+# 先演练（可选）：TestPyPI
+python -m twine upload --repository testpypi dist/*
+
+# 正式：
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD=pypi-xxxxxxxxxxxxxxxx     # 只放环境变量，别写进文件/仓库
+python -m twine upload dist/*
+```
+
+## 7. 验证与常见问题
+```bash
+python -m pip install -U ecom-serial-tool==%s
+```
+- **400 File already exists**：版本号已被占用 → 升版本（改 `pyproject.toml` 与 `ecom/__init__.py` 两处）后重新构建。
+- **twine check 报 README 渲染问题**：README 里的相对链接/图片在 PyPI 上会失效（不影响上传）。
+- **Linux 起来没界面**：`python3-tk` 没装（这是系统包，pip 装不了）。
+- **wheel 带不动 `.pyc`**：正常，构建前已清理 `__pycache__`。
+""" % (VERSION, VERSION, VERSION, VERSION)
+
+
+def read_text(p):
+    """白名单进程读明文。"""
+    with io.open(p, encoding="utf-8", errors="replace", newline="") as fh:
+        return fh.read()
+
+
+def write_text(p, s):
+    with io.open(p, "w", encoding="utf-8", newline="") as fh:
+        fh.write(s)
+
+
+# ---------------- ① 版本同步 ----------------
+for path, old, new in (
+    (os.path.join(ROOT, "pyproject.toml"), 'version = "0.1.0"', 'version = "%s"' % VERSION),
+    (os.path.join(ROOT, "ecom", "__init__.py"), '__version__ = "0.1.0"',
+     '__version__ = "%s"' % VERSION),
+):
+    s = read_text(path)
+    if new in s:
+        print("版本已是 %s，跳过:" % VERSION, os.path.relpath(path, ROOT))
+        continue
+    if s.count(old) != 1:
+        raise SystemExit("%s 里找不到唯一版本串（%d 次）" % (path, s.count(old)))
+    write_text(path, s.replace(old, new))
+    print("版本已更新:", os.path.relpath(path, ROOT), "->", VERSION)
+
+# ---------------- ② 打明文包 ----------------
+INCLUDE_FILES = ["pyproject.toml", "README.md", "requirements.txt"]
+INCLUDE_DIRS = ["ecom", "tests"]
+SKIP_DIRS = {"__pycache__", ".pytest_cache", ".git"}
+SKIP_EXT = {".pyc", ".pyo", ".zip", ".whl"}
+
+members = []
+for rel in INCLUDE_FILES:
+    p = os.path.join(ROOT, rel)
+    if os.path.exists(p):
+        members.append((rel, p))
+    else:
+        print("  (缺) %s" % rel)
+for d in INCLUDE_DIRS:
+    base = os.path.join(ROOT, d)
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = [x for x in dirnames if x not in SKIP_DIRS]
+        for fn in sorted(filenames):
+            if os.path.splitext(fn)[1] in SKIP_EXT:
+                continue
+            full = os.path.join(dirpath, fn)
+            members.append((os.path.relpath(full, ROOT).replace("\\", "/"), full))
+
+if os.path.exists(BUNDLE):
+    os.remove(BUNDLE)
+with zipfile.ZipFile(BUNDLE, "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("BUILD_ON_LINUX.md", BUILD_MD)
+    for rel, full in members:
+        z.writestr(rel, read_text(full).encode("utf-8"))
+print("已生成:", BUNDLE)
+
+# ---------------- ③ 校验 ----------------
+tmp = os.path.join(os.environ.get("TEMP", "."), "_ecom_bundle_check")
+if os.path.isdir(tmp):
+    shutil.rmtree(tmp)
+with zipfile.ZipFile(BUNDLE) as z:
+    names = z.namelist()
+    z.extractall(tmp)
+print("包内文件数:", len(names))
+print("  py 文件:", len([n for n in names if n.endswith(".py")]))
+
+r = subprocess.run([sys.executable, "-m", "compileall", "-q", "ecom", "tests"],
+                   cwd=tmp, capture_output=True)
+print("compileall:", "OK" if r.returncode == 0 else r.stderr.decode("utf-8", "replace")[:400])
+
+r = subprocess.run([sys.executable, "-m", "unittest", "discover", "tests"],
+                   cwd=tmp, capture_output=True)
+out = (r.stdout + r.stderr).decode("utf-8", "replace")
+print("解包后跑测试:", [l for l in out.splitlines()
+                        if "Ran " in l or l.strip() in ("OK", "FAILED")])
+
+with open(BUNDLE, "rb") as fh:
+    print("SHA256:", hashlib.sha256(fh.read()).hexdigest())
+print("大小:", os.path.getsize(BUNDLE), "字节")

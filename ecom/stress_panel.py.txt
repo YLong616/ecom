@@ -1,0 +1,1807 @@
+"""压力模式主视图（独立于 AT 模式）。
+
+- 独立串口实例（``SerialCore``），与 AT 模式不共享连接；打开失败弹提示。
+- 布局（统一两列网格，保证上下左右对称）：
+  * row0：压测名称行（横跨两列，entry 加宽）。
+  * row1：串口配置（压测）｜压测配置（次数/时间二选一、行间隔、响应超时、AT/DOS Log）。
+  * row2：输出（接收）+ 输出 Log 配置｜AT list（分页 + 横向滚动）+ 自定义 check + 开始/停止 + 统计。
+
+运行：用 ``after`` 状态机（send -> wait -> interval -> next），主线程内驱动，响应收集
+按静默 idle + 超时聚合，再匹配预期 / 跑 check 规则。
+"""
+
+from __future__ import annotations
+
+import datetime
+import math
+import time
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+
+from . import codec, i18n, stress_io, stress_model
+from .tooltip import Tooltip
+from . import uikit
+from .logger import Logger
+from .serial_core import SerialCore
+from .stress_model import (MATCH_MODES, TARGET_AT, TARGET_BOTH, TARGET_DOS,
+                           BUILTIN_RULES, CheckRule, StressRow,
+                           compute_end_condition, format_duration, format_window,
+                           match_expected, run_check_rules)
+
+# 常量
+PAGE_SIZE = 8              # AT list 每页行数（分页展示，避免滚动轮）
+RULES_PER_PAGE = 3         # 自定义 Check 规则每页行数（分页避免挤掉下方组件）
+POLL_MS = 30               # 接收轮询
+RESP_IDLE_MS = 120         # 响应聚合静默阈值
+DEFAULT_TIMEOUT_MS = 2000
+MIN_INTERVAL_MS = 0
+MAX_INTERVAL_MS = 3600000
+MAX_TIMEOUT_MS = 600000
+
+SEND_TYPES = codec.SEND_TYPES
+SUFFIXES = codec.SUFFIXES
+
+MATCH_MODE_KEYS = {
+    "contains": "stress_match_contains",
+    "regex": "stress_match_regex",
+    "exact": "stress_match_exact",
+}
+TARGET_KEYS = {
+    TARGET_AT: "stress_target_at",
+    TARGET_DOS: "stress_target_dos",
+    TARGET_BOTH: "stress_target_both",
+}
+
+
+class StressPanel(ttk.Frame):
+    def __init__(self, master, app):
+        super().__init__(master)
+        self.app = app
+        self.P = app.P
+
+        self.core = SerialCore()          # 独立串口（不与 AT 共享连接）
+        self.logger_at = Logger()
+        self.logger_dos = Logger()
+
+        self._rows: list[StressRow] = [
+            StressRow(enabled=False) for _ in range(PAGE_SIZE)
+        ]
+        self._rules: list[CheckRule] = [CheckRule(**vars(r)) for r in BUILTIN_RULES]
+        self._row_vars: list[dict] = []
+
+        self._running = False
+        self._phase = "idle"              # idle/send/wait/interval
+        self._job = None                  # after job
+        self._rows_run: list[StressRow] = []
+        self._row_idx = 0
+        self._rounds_done = 0
+        self._stats = stress_model.RunStats()
+        self._start_mono = 0.0
+        self._resp_buf = bytearray()
+        self._resp_last = 0.0
+        self._resp_start = 0.0
+        self._syncing = False
+        # 显示缓冲 / 轮询句柄
+        self._rx_display_buf = bytearray()
+        self._rx_last = 0.0
+        self._poll_job = None
+
+        # 分页状态
+        self._page = 1
+        self.page_var = tk.StringVar(value="1")
+        # 选中状态
+        self.sel_all_var = tk.BooleanVar(value=False)
+        self.hex_all_var = tk.BooleanVar(value=False)
+        self.enter_all_var = tk.BooleanVar(value=False)
+        self.type_all_var = tk.StringVar(value="")
+        self.suffix_all_var = tk.StringVar(value="")
+
+        self._ensure_styles()
+        self._build()
+        self._build_rules_editor()
+        self._poll_rx()
+
+    def _ensure_styles(self):
+        try:
+            style = ttk.Style(self)
+            try:
+                self._run_font = self.app.ui_font.copy()
+                self._run_font.configure(weight="bold")
+            except Exception:
+                self._run_font = self.app.ui_font
+            _run = self.app.P["success"]
+            _runh = self.app.P["success_h"]
+            _stop = self.app.P["danger"]
+            style.configure("Run.TButton", background=_run, foreground="#ffffff",
+                            borderwidth=0, focuscolor=_run, padding=(12, 3),
+                            font=self._run_font)
+            style.map("Run.TButton",
+                      background=[("disabled", _runh), ("active", _runh)],
+                      foreground=[("disabled", "#ffffff"), ("active", "#ffffff")])
+            style.configure("Stop.TButton", background=_stop, foreground="#ffffff",
+                            borderwidth=0, focuscolor=_stop, padding=(12, 3))
+            style.map("Stop.TButton", background=[("active", self.app.P["danger_h"])])
+            # AT list 小字号，保证所有列在不出现横向滚动的情况下放下
+            f = self.app.ui_font
+            try:
+                self._small = f.copy()
+            except Exception:
+                self._small = f
+            try:
+                sz = int(f.cget("size"))
+                self._small.configure(size=max(7, sz - 1))
+            except Exception:
+                pass
+            style.configure("Small.TEntry", font=self._small, padding=0)
+            style.configure("Small.TCombobox", font=self._small, padding=0)
+            style.configure("Small.TLabel", font=self._small)
+            style.configure("Small.TButton", font=self._small, padding=(2, 0))
+        except Exception:
+            pass
+
+    # ---------- 翻译 / 配色 ----------
+    def _t(self, key, **fmt):
+        return self.app._t(key, **fmt)
+
+    def _refresh_language(self):
+        """语言切换后由 app 调用的动态刷新：处理不登记的动态文本控件。"""
+        try:
+            if self.core.is_open:
+                self.open_btn.config(text=self._t("close"))
+            else:
+                self.open_btn.config(text=self._t("open"))
+        except Exception:
+            pass
+        try:
+            if str(self.name_entry["state"]) == "disabled":
+                self.name_btn.config(text=self._t("stress_edit"))
+            else:
+                self.name_btn.config(text=self._t("stress_save"))
+        except Exception:
+            pass
+        try:
+            if self._running:
+                self.run_btn.config(text=str(self._rounds_done + 1))
+            else:
+                self.run_btn.config(text=self._t("stress_start"))
+        except Exception:
+            pass
+        try:
+            self._update_run_info()
+            self._update_pager()
+            self._update_rules_pager()
+            self._render_page()
+        except Exception:
+            pass
+
+
+    def _bg(self):
+        return self.P["surface"]
+
+    def _fg(self):
+        return self.P["text"]
+
+    # ------------------------------------------------------------
+    # 构建
+    # ------------------------------------------------------------
+    def _build(self):
+        # 统一两列网格：col0(名称+串口配置/输出) weight2, col1(压测配置/AT区) weight3
+        self.columnconfigure(0, weight=2, minsize=300)
+        self.columnconfigure(1, weight=3, minsize=380)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
+
+        # 左列容器：压力名称(上) + 串口配置(下)，与右列压测配置在同一行等高。
+        # 压力名称只占左列（宽度与串口配置一致），填充串口配置被拉高后的"多出高度"，
+        # 不再横跨两列把下方压下来。
+        left = ttk.Frame(self, style="TFrame")
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=(4, 0))
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(1, weight=1)
+        self._build_name_bar(left)
+        self._build_serial_card(left)
+
+        right = ttk.Frame(self, style="TFrame")
+        right.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(8, 0), pady=(4, 0))
+        self._build_stress_config(right)
+        self._build_io_bar(right)
+        self._build_list(right)
+        self._build_run(right)
+
+        self._build_output(self)
+
+    def _build_name_bar(self, parent):
+        """压测名称：独立组件，放在串口配置卡上方（同列，宽度一致），不横跨整行。"""
+        box = ttk.LabelFrame(parent, text=self._t("stress_name"),
+                             style="Card.TLabelframe")
+        box.grid(row=0, column=0, sticky="ew", padx=6, pady=(1, 1))
+        self.app._register("stress_name", box)
+        box.columnconfigure(0, weight=1)
+        row = ttk.Frame(box, style="Surface.TFrame")
+        row.grid(row=0, column=0, sticky="ew", padx=8, pady=(2, 2))
+        self.name_var = tk.StringVar(value=self._t("stress_name_default"))
+        self.name_entry = ttk.Entry(row, textvariable=self.name_var, state="disabled")
+        self.name_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.name_btn = ttk.Button(row, text=self._t("stress_edit"),
+                                   command=self._toggle_name_edit, width=6)
+        self.name_btn.pack(side="left")
+
+    def _build_serial_card(self, parent):
+        box = ttk.LabelFrame(parent, text=self._t("stress_serial"),
+                             style="Card.TLabelframe")
+        box.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 3))
+        self.app._register("stress_serial", box)
+        self._port_map = {}
+        # 热插拔检测：记录当前打开端口名，周期性探测其是否存在
+        self._active_port = None            # 当前打开的真实端口名(设备名)
+        self._presence_tick = 0             # 轮询计数
+        self._presence_check_interval = 20  # 每 20 次轮询(30ms)≈600ms 探测一次
+        self._disconnecting = False         # 防重入标志
+        self.port_var = tk.StringVar()
+        self.baud_var = tk.StringVar(value="115200")
+        self.databits_var = tk.StringVar(value="8")
+        self.stopbits_var = tk.StringVar(value="1")
+        self.parity_var = tk.StringVar(value="None (N)")
+        self.flow_var = tk.StringVar(value="None")
+
+        box.columnconfigure(1, weight=1)
+        box.columnconfigure(4, weight=1)
+
+        def fl(label_key, widget, row, col):
+            _lbl = ttk.Label(box, text=self._t(label_key), style="MutedSurface.TLabel")
+            _lbl.grid(row=row, column=col, sticky="e", padx=(8, 4), pady=1)
+            self.app._register(label_key, _lbl)
+            widget.grid(row=row, column=col + 1, sticky="ew", padx=(0, 8), pady=1)
+
+        self.port_combo = ttk.Combobox(box, textvariable=self.port_var, width=14)
+        fl("port", self.port_combo, 0, 0)
+        self.baud_combo = ttk.Combobox(box, textvariable=self.baud_var,
+                                       values=self._baud_values(), width=7)
+        fl("baudrate", self.baud_combo, 0, 3)
+        self.databits_combo = ttk.Combobox(box, textvariable=self.databits_var,
+                                           values=["8", "7", "6", "5"], width=5)
+        fl("databits", self.databits_combo, 1, 0)
+        self.stopbits_combo = ttk.Combobox(box, textvariable=self.stopbits_var,
+                                           values=["1", "1.5", "2"], width=5)
+        fl("stopbits", self.stopbits_combo, 1, 3)
+        self.parity_combo = ttk.Combobox(box, textvariable=self.parity_var,
+                                         values=["None (N)", "Even (E)", "Odd (O)",
+                                                 "Mark (M)", "Space (S)"], width=8)
+        fl("parity", self.parity_combo, 2, 0)
+        self.flow_combo = ttk.Combobox(box, textvariable=self.flow_var,
+                                       values=["None", "RTS/CTS", "XON/XOFF"], width=8)
+        fl("flow", self.flow_combo, 2, 3)
+
+        ops = ttk.Frame(box, style="Surface.TFrame")
+        ops.grid(row=8, column=0, columnspan=5, sticky="ew", padx=8, pady=(2, 2))
+        refresh = ttk.Button(ops, text=self._t("refresh"), command=self._refresh_ports)
+        refresh.pack(side="right")
+        self.app._register("refresh", refresh)
+        self.open_btn = ttk.Button(ops, text=self._t("open"), command=self._toggle_port,
+                                   style="Primary.TButton")
+        self.open_btn.pack(side="right", padx=(8, 0))
+
+    def _baud_values(self):
+        return ["9600", "19200", "38400", "57600", "115200", "230400",
+                "460800", "921600"]
+
+    def _build_stress_config(self, parent):
+        box = ttk.LabelFrame(parent, text=self._t("stress_config"),
+                             style="Card.TLabelframe")
+        box.configure(height=155)
+        self.app._register("stress_config", box)
+        box.pack(fill="x", padx=0, pady=(0, 4))
+        self.end_mode_var = tk.StringVar(value="count")
+        self.count_var = tk.IntVar(value=1)
+        self.time_min_var = tk.StringVar(value="1")
+        self.interval_var = tk.IntVar(value=300)
+        self.timeout_var = tk.IntVar(value=DEFAULT_TIMEOUT_MS)
+        self.at_log_var = tk.StringVar(value="")
+        self.dos_log_var = tk.StringVar(value="")
+
+        box.columnconfigure(1, weight=1)
+        box.columnconfigure(4, weight=1)
+
+        # 结束条件（横跨）
+        row_end = ttk.Frame(box, style="Surface.TFrame")
+        row_end.grid(row=0, column=0, columnspan=5, sticky="ew", padx=8, pady=(4, 1))
+        _el = ttk.Label(row_end, text=self._t("stress_end"), style="MutedSurface.TLabel")
+        _el.pack(side="left", padx=(0, 6))
+        self.app._register("stress_end", _el)
+        _rc = ttk.Radiobutton(row_end, text=self._t("stress_end_count"), value="count",
+                        variable=self.end_mode_var, command=self._sync_end_mode)
+        _rc.pack(side="left", padx=(0, 8)); self.app._register("stress_end_count", _rc)
+        _rt = ttk.Radiobutton(row_end, text=self._t("stress_end_time"), value="time",
+                        variable=self.end_mode_var, command=self._sync_end_mode)
+        _rt.pack(side="left"); self.app._register("stress_end_time", _rt)
+
+        def fl(label_key, widget, row, col):
+            _lbl = ttk.Label(box, text=self._t(label_key), style="MutedSurface.TLabel")
+            _lbl.grid(row=row, column=col, sticky="e", padx=(8, 4), pady=1)
+            self.app._register(label_key, _lbl)
+            widget.grid(row=row, column=col + 1, sticky="ew", padx=(0, 8), pady=1)
+
+        self.count_spin = ttk.Spinbox(box, from_=1, to=9999, textvariable=self.count_var,
+                                      width=6, command=self._norm_count)
+        fl("stress_count", self.count_spin, 1, 0)
+        self.time_entry = ttk.Entry(box, textvariable=self.time_min_var, width=6)
+        fl("stress_time", self.time_entry, 1, 3)
+        _tu = ttk.Label(box, text=self._t("stress_time_unit"), style="MutedSurface.TLabel")
+        _tu.grid(row=1, column=5, sticky="w", padx=(2, 8))
+        self.app._register("stress_time_unit", _tu)
+
+        self.interval_spin = ttk.Spinbox(box, from_=MIN_INTERVAL_MS, to=MAX_INTERVAL_MS,
+                                         textvariable=self.interval_var, width=7,
+                                         command=self._norm_interval)
+        fl("stress_interval", self.interval_spin, 2, 0)
+        self.timeout_spin = ttk.Spinbox(box, from_=100, to=MAX_TIMEOUT_MS,
+                                        textvariable=self.timeout_var, width=7,
+                                        command=self._norm_timeout)
+        fl("stress_timeout", self.timeout_spin, 2, 3)
+
+        self._log_row(box, "stress_at_log", self.at_log_var, "at", row=3)
+        self._log_row(box, "stress_dos_log", self.dos_log_var, "dos", row=4)
+
+    def _log_row(self, parent, label_key, var, tag, row):
+        _rlab = ttk.Label(parent, text=self._t(label_key), style="MutedSurface.TLabel")
+        _rlab.grid(row=row, column=0, sticky="e", padx=(8, 4), pady=1)
+        self.app._register(label_key, _rlab)
+        ent = ttk.Entry(parent, textvariable=var)
+        ent.grid(row=row, column=1, columnspan=4, sticky="ew", padx=(0, 4), pady=1)
+        btn = ttk.Button(parent, text=self._t("stress_log_sel"),
+                         command=lambda t=tag: self._choose_log(t))
+        btn.grid(row=row, column=5, padx=(0, 8), pady=1)
+        self.app._register("stress_log_sel", btn)
+        Tooltip(ent, text=lambda: var.get())
+        Tooltip(btn, text=lambda: var.get())
+
+    def _build_output(self, parent):
+        left = ttk.Frame(parent, style="TFrame")
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, 8), pady=(4, 0))
+        left.rowconfigure(0, weight=1)
+        left.columnconfigure(0, weight=1)
+
+        box = ttk.LabelFrame(left, text=self._t("stress_output"),
+                             style="Card.TLabelframe")
+        box.grid(row=0, column=0, sticky="nsew")
+        self.app._register("stress_output", box)
+        box.columnconfigure(0, weight=1)
+        box.rowconfigure(0, weight=1)
+        self.output = scrolledtext.ScrolledText(
+            box, font=self._out_font(), wrap="word", height=12,
+            bg="#FFFFFF", fg="#1B2733", insertbackground="#1B2733",
+            relief="flat", borderwidth=1, state="normal")
+        self.output.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        uikit.slim_scrollbar(self.output.vbar, self.P["secondary"],
+                             self.P["idle"], self.P["muted"])
+        # 只读但可选中 + 右键复制 / Ctrl+A / Ctrl+C（复用 app 的同款实现）
+        self.app._install_select_menu(self.output)
+
+        opt = ttk.Frame(box, style="Surface.TFrame")
+        opt.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
+        self.show_ts = tk.BooleanVar(value=True)
+        self.show_dir = tk.BooleanVar(value=True)
+        self.show_crlf = tk.BooleanVar(value=True)
+        self.show_hex = tk.BooleanVar(value=False)
+        self.dtr_var = tk.BooleanVar(value=False)
+        self.rts_var = tk.BooleanVar(value=False)
+        for key, var in [("display_timestamp", self.show_ts),
+                         ("display_direction", self.show_dir),
+                         ("display_crlf", self.show_crlf),
+                         ("display_hex", self.show_hex)]:
+            chk = tk.Checkbutton(opt, text=self._t(key), variable=var,
+                                 font=self._ui_font(), bg=self._bg(), fg=self._fg(),
+                                 activebackground=self._bg(), activeforeground=self._fg(),
+                                 selectcolor=self._bg(), highlightthickness=0, bd=0)
+            chk.pack(side="left", padx=(4, 0))
+            self.app._register(key, chk)
+        ttk.Separator(opt, orient="vertical").pack(side="left", fill="y", padx=(8, 8))
+        self.dtr_chk = tk.Checkbutton(opt, text=self._t("dtr"), variable=self.dtr_var,
+                                      command=lambda: self.core.set_dtr(self.dtr_var.get()),
+                                      font=self._ui_font(), bg=self._bg(), fg=self._fg(),
+                                      activebackground=self._bg(), activeforeground=self._fg(),
+                                      selectcolor=self._bg(), highlightthickness=0, bd=0)
+        self.app._register("dtr", self.dtr_chk)
+        self.dtr_chk.pack(side="left", padx=(4, 0))
+        self.rts_chk = tk.Checkbutton(opt, text=self._t("rts"), variable=self.rts_var,
+                                      command=lambda: self.core.set_rts(self.rts_var.get()),
+                                      font=self._ui_font(), bg=self._bg(), fg=self._fg(),
+                                      activebackground=self._bg(), activeforeground=self._fg(),
+                                      selectcolor=self._bg(), highlightthickness=0, bd=0)
+        self.app._register("rts", self.rts_chk)
+        self.rts_chk.pack(side="left", padx=(4, 0))
+        _cob = ttk.Button(opt, text=self._t("clear_output"),
+                   command=self._clear_output)
+        _cob.pack(side="right", padx=(0, 2))
+        self.app._register("clear_output", _cob)
+
+        # 运行统计：放在输出框底下
+        stats = ttk.LabelFrame(left, text=self._t("stress_stats"),
+                               style="Card.TLabelframe")
+        stats.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.app._register("stress_stats", stats)
+        self.stats_text = tk.Text(stats, height=5, width=1, relief="flat",
+                                  bg=self._bg(), fg=self._fg(), borderwidth=0,
+                                  font=self._out_font(), state="disabled",
+                                  spacing1=4, spacing2=8, spacing3=6)
+        self.stats_text.pack(fill="x", padx=6, pady=4)
+        self._update_stats()
+
+    def _build_io_bar(self, parent):
+        bar = ttk.Frame(parent, style="TFrame")
+        bar.pack(fill="x", pady=(0, 4))
+        for key, cmd in [("stress_export_tpl", self._export_template),
+                         ("stress_import", self._import_data),
+                         ("stress_export", self._export_data)]:
+            _ib = ttk.Button(bar, text=self._t(key), command=cmd)
+            _ib.pack(side="left", padx=(0, 4)); self.app._register(key, _ib)
+        _cb = ttk.Button(bar, text=self._t("stress_clear"), command=self._clear_at_list)
+        _cb.pack(side="left", padx=(0, 4)); self.app._register("stress_clear", _cb)
+
+    def _build_list(self, parent):
+        wrap = ttk.LabelFrame(parent, text=self._t("stress_at_list"),
+                              style="Card.TLabelframe")
+        self.app._register("stress_at_list", wrap)
+        wrap.pack(fill="both", expand=True, pady=(0, 4))
+        body = ttk.Frame(wrap, style="Surface.TFrame")
+        body.pack(fill="both", expand=True, padx=4, pady=(4, 0))
+        self._canvas = tk.Canvas(body, highlightthickness=0, bg=self._bg(),
+                                 borderwidth=0)
+        # 横向滚动：AT list 列多时左右滑动查看
+        hsb = ttk.Scrollbar(body, orient="horizontal", command=self._canvas.xview)
+        self._canvas.configure(xscrollcommand=hsb.set)
+        self._canvas.pack(side="left", fill="both", expand=True)
+        hsb.pack(side="bottom", fill="x")
+        self._list_frame = ttk.Frame(self._canvas, style="Surface.TFrame")
+        self._canvas.create_window((0, 0), window=self._list_frame, anchor="nw")
+        self._list_frame.bind(
+            "<Configure>",
+            lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
+        self._canvas.bind("<Configure>", self._sync_canvas_width)
+        self._canvas.bind("<MouseWheel>", self._on_mousewheel)
+
+        self._build_grid_header()   # 固定表头 row0
+        self._render_page()
+
+        # 分页控件
+        pager = ttk.Frame(wrap, style="TFrame")
+        pager.pack(fill="x", padx=4, pady=(2, 4))
+        self.prev_btn = ttk.Button(pager, text=self._t("at_prev"),
+                                   command=self._go_prev)
+        self.prev_btn.pack(side="left")
+        self.app._register("at_prev", self.prev_btn)
+        self.page_entry = ttk.Entry(pager, textvariable=self.page_var, width=4)
+        self.page_entry.pack(side="left", padx=(4, 0))
+        self.page_entry.bind("<Return>", lambda e: self._goto_page())
+        _pg = ttk.Button(pager, text=self._t("at_page_goto"), width=4,
+                   command=self._goto_page)
+        _pg.pack(side="left", padx=(2, 0)); self.app._register("at_page_goto", _pg)
+        self.page_lbl = ttk.Label(pager, text="", style="Muted.TLabel")
+        self.page_lbl.pack(side="left", padx=(8, 0))
+        self.next_btn = ttk.Button(pager, text=self._t("at_next"),
+                                   command=self._go_next)
+        self.next_btn.pack(side="right")
+        self.app._register("at_next", self.next_btn)
+        _ap = ttk.Button(pager, text=self._t("at_add_page"), command=self._add_page)
+        _ap.pack(side="right", padx=(0, 4))
+        self.app._register("at_add_page", _ap)
+        self._update_pager()
+
+    def _sync_canvas_width(self, e=None):
+        # 横向滚动：内容宽 = max(canvas 可视宽, 内容所需宽)，列不裁剪，超出可左右滑动
+        try:
+            req = self._list_frame.winfo_reqwidth()
+            w = e.width if e is not None else self._canvas.winfo_width()
+            if w:
+                self._canvas.itemconfigure(1, width=max(w, req))
+        except Exception:
+            pass
+
+    def _on_mousewheel(self, event):
+        try:
+            self._canvas.xview_scroll(int(-event.delta / 120), "units")
+        except Exception:
+            pass
+
+    def _grid_header(self):
+        pass
+
+    def _build_grid_header(self):
+        # 列：0序号 1全选 2AT 3HEX 4Enter 5类型 6后缀 7间隔 8预期 9编辑
+        weights = [0, 0, 1, 0, 0, 0, 0, 0, 1, 0]
+        for c, w in enumerate(weights):
+            self._list_frame.columnconfigure(c, weight=w)
+        header_keys = [None, None, "stress_at", "stress_hex",
+                       "stress_enter", "stress_type",
+                       "stress_suffix", "stress_interval_col",
+                       "stress_expected", None]
+        for c, _hk in enumerate(header_keys):
+            # col3=HEX / col4=Enter：顶格全选、去全选 master
+            if c == 3:
+                tk.Checkbutton(self._list_frame, text=self._t("stress_hex"),
+                               variable=self.hex_all_var,
+                               command=self._toggle_hex_all,
+                               font=self._ui_font(),
+                               bg=self._bg(), fg=self._fg(),
+                               activebackground=self._bg(),
+                               activeforeground=self._fg(),
+                               selectcolor=self._bg(),
+                               highlightthickness=0, bd=0).grid(
+                    row=0, column=3, padx=(2, 2), pady=2)
+                continue
+            if c == 4:
+                tk.Checkbutton(self._list_frame, text=self._t("stress_enter"),
+                               variable=self.enter_all_var,
+                               command=self._toggle_enter_all,
+                               font=self._ui_font(),
+                               bg=self._bg(), fg=self._fg(),
+                               activebackground=self._bg(),
+                               activeforeground=self._fg(),
+                               selectcolor=self._bg(),
+                               highlightthickness=0, bd=0).grid(
+                    row=0, column=4, padx=(2, 2), pady=2)
+                continue
+            if c == 5:
+                _cb = ttk.Combobox(self._list_frame, values=SEND_TYPES, width=5,
+                                   state="readonly", textvariable=self.type_all_var)
+                _cb.bind("<<ComboboxSelected>>", self._apply_type_all)
+                _cb.grid(row=0, column=5, padx=(2, 2), pady=2)
+                Tooltip(_cb, self._t("stress_type_all"))
+                continue
+            if c == 6:
+                _cb = ttk.Combobox(self._list_frame, values=SUFFIXES, width=6,
+                                   state="readonly", textvariable=self.suffix_all_var)
+                _cb.bind("<<ComboboxSelected>>", self._apply_suffix_all)
+                _cb.grid(row=0, column=6, padx=(2, 2), pady=2)
+                Tooltip(_cb, self._t("stress_suffix_all"))
+                continue
+            _ht = self._t(_hk) if _hk else ""
+            _hl = ttk.Label(self._list_frame, text=_ht, style="MutedSurface.TLabel")
+            _hl.grid(row=0, column=c, padx=(2, 2), pady=2)
+            if _hk:
+                self.app._register(_hk, _hl)
+        # 页全选 master（表头 col1）
+        tk.Checkbutton(self._list_frame, variable=self.sel_all_var,
+                       command=self._toggle_select_all,
+                       bg=self._bg(), fg=self._fg(),
+                       activebackground=self._bg(), activeforeground=self._fg(),
+                       selectcolor=self._bg(), highlightthickness=0, bd=0).grid(
+            row=0, column=1, padx=(2, 2), pady=2)
+
+    def _render_page(self):
+        self.sel_all_var.set(False)   # 换页后总选复选框反映当前页
+        self.hex_all_var.set(False)
+        self.enter_all_var.set(False)
+        self.type_all_var.set("")
+        self.suffix_all_var.set("")
+        # 仅清理数据行（row>=1），保留表头 row0
+        for w in list(self._list_frame.grid_slaves()):
+            try:
+                if int(w.grid_info()["row"]) >= 1:
+                    w.destroy()
+            except (KeyError, ValueError, tk.TclError):
+                w.destroy()
+        self._row_vars = []
+        start = (self._page - 1) * PAGE_SIZE
+        for k in range(PAGE_SIZE):
+            gi = start + k
+            row = self._rows[gi] if gi < len(self._rows) else StressRow(enabled=False)
+            self._build_row(k, row, gi)
+        self._sync_canvas_width()
+
+    def _build_row(self, row_elem, row: StressRow, gidx):
+        g = self._list_frame
+        r = row_elem + 1
+        ttk.Label(g, text=str(gidx + 1), style="MutedSurface.TLabel", width=3).grid(
+            row=r, column=0, padx=(2, 2), pady=1)
+        selvar = tk.BooleanVar(value=row.enabled)
+        tk.Checkbutton(g, variable=selvar, bg=self._bg(), fg=self._fg(),
+                       activebackground=self._bg(), activeforeground=self._fg(),
+                       selectcolor=self._bg(), highlightthickness=0, bd=0).grid(
+            row=r, column=1, padx=(2, 2), pady=1)
+        txtvar = tk.StringVar(value=row.txt)
+        ttk.Entry(g, textvariable=txtvar).grid(row=r, column=2, sticky="ew",
+                                               padx=(2, 2), pady=1)
+        hexvar = tk.BooleanVar(value=row.hex)
+        tk.Checkbutton(g, variable=hexvar, font=self._ui_font(), bg=self._bg(), fg=self._fg(),
+                       activebackground=self._bg(), activeforeground=self._fg(),
+                       selectcolor=self._bg(), highlightthickness=0, bd=0).grid(
+            row=r, column=3, padx=(2, 2), pady=1)
+        entvar = tk.BooleanVar(value=row.enter)
+        tk.Checkbutton(g, variable=entvar, font=self._ui_font(), bg=self._bg(), fg=self._fg(),
+                       activebackground=self._bg(), activeforeground=self._fg(),
+                       selectcolor=self._bg(), highlightthickness=0, bd=0).grid(
+            row=r, column=4, padx=(2, 2), pady=1)
+        typevar = tk.StringVar(value=row.send_type)
+        ttk.Combobox(g, textvariable=typevar, values=SEND_TYPES, width=5,
+                     state="readonly").grid(row=r, column=5, padx=(2, 2), pady=1)
+        suffixvar = tk.StringVar(value=row.send_suffix)
+        ttk.Combobox(g, textvariable=suffixvar, values=SUFFIXES, width=6,
+                     state="readonly").grid(row=r, column=6, padx=(2, 2), pady=1)
+        intervalvar = tk.StringVar(value=str(row.interval_ms if row.interval_ms else 300))
+        ttk.Entry(g, textvariable=intervalvar, width=5).grid(row=r, column=7,
+                                                             padx=(2, 2), pady=1)
+        expvar = tk.StringVar(value=self._expected_summary(row.expected))
+        exp_entry = ttk.Entry(g, textvariable=expvar, width=10)
+        exp_entry.grid(row=r, column=8, padx=(2, 2), pady=1)
+        edit = ttk.Button(g, text=self._t("stress_expected_edit"), width=4,
+                          command=lambda i=gidx: self._edit_expected(i))
+        edit.grid(row=r, column=9, padx=(2, 2), pady=1)
+
+        v = {"gidx": gidx, "sel": selvar, "txt": txtvar, "hex": hexvar,
+             "enter": entvar, "type": typevar, "suffix": suffixvar,
+             "interval": intervalvar, "expected": expvar}
+        self._row_vars.append(v)
+        # hex/enter ↔ 类型/后缀 双向同步
+        hexvar.trace_add("write", lambda *_, i=gidx, k="hex": self._sync_row(i, k))
+        entvar.trace_add("write", lambda *_, i=gidx, k="enter": self._sync_row(i, k))
+        typevar.trace_add("write", lambda *_, i=gidx, k="type": self._sync_row(i, k))
+        suffixvar.trace_add("write", lambda *_, i=gidx, k="suffix": self._sync_row(i, k))
+        expvar.trace_add("write", lambda *_, i=gidx: self._sync_expected(i))
+
+    def _sync_row(self, gidx, source):
+        if self._syncing:
+            return
+        v = next((x for x in self._row_vars if x.get("gidx") == gidx), None)
+        if not v:
+            return
+        self._syncing = True
+        try:
+            if source == "hex":
+                v["type"].set("HEX" if v["hex"].get() else "ASCII")
+            elif source == "type":
+                v["hex"].set(v["type"].get() == "HEX")
+            elif source == "enter":
+                v["suffix"].set("CR-LF" if v["enter"].get() else "None")
+            elif source == "suffix":
+                v["enter"].set(v["suffix"].get() == "CR-LF")
+        finally:
+            self._syncing = False
+
+    def _expected_summary(self, expected: str) -> str:
+        return " | ".join(p for p in stress_model.parse_expected(expected)) or ""
+
+    def _build_run(self, parent):
+        box = ttk.LabelFrame(parent, text=self._t("stress_check_rules"),
+                             style="Card.TLabelframe")
+        box.pack(fill="x", pady=(0, 4))
+        self.app._register("stress_check_rules", box)
+        self._rules_box = box
+        self._rules_rows = ttk.Frame(box, style="Surface.TFrame")
+        self._rules_rows.pack(fill="x", padx=6, pady=4)
+        self._rules_page = 1
+
+        ctrl = ttk.Frame(parent, style="TFrame")
+        ctrl.pack(fill="x", pady=(0, 2))
+        self.run_btn = ttk.Button(ctrl, text=self._t("stress_start"),
+                                  command=self._start_run, style="Run.TButton")
+        self.run_btn.pack(side="left")
+        self.stop_btn = ttk.Button(ctrl, text=self._t("stress_stop"),
+                                   command=self._stop_run, style="Stop.TButton",
+                                   state="disabled")
+        self.app._register("stress_stop", self.stop_btn)
+        self.stop_btn.pack(side="left", padx=(6, 0))
+        self.run_info_lbl = ttk.Label(ctrl, text="", style="Muted.TLabel")
+        self.run_info_lbl.pack(side="left", padx=(10, 0))
+
+    # ---------- 分页 ----------
+    def _sync_page_to_rows(self):
+        """把当前页 tk 变量写回 self._rows（翻页/运行前调用，防编辑丢失）。"""
+        for v in self._row_vars:
+            gi = v["gidx"]
+            row = self._rows[gi] if gi < len(self._rows) else StressRow()
+            row.txt = v["txt"].get()
+            row.enabled = bool(v["sel"].get())
+            row.hex = bool(v["hex"].get())
+            row.enter = bool(v["enter"].get())
+            row.send_type = v["type"].get()
+            row.send_suffix = v["suffix"].get()
+            try:
+                row.interval_ms = max(MIN_INTERVAL_MS, int(v["interval"].get()))
+            except (ValueError, tk.TclError):
+                row.interval_ms = 0
+            if gi >= len(self._rows):
+                self._rows.append(row)
+            else:
+                self._rows[gi] = row
+
+    def _total_pages(self):
+        return max(1, math.ceil(len(self._rows) / PAGE_SIZE))
+
+    def _go_prev(self):
+        if self._page > 1:
+            self._sync_page_to_rows()
+            self._page -= 1
+            self._render_page()
+            self._update_pager()
+
+    def _go_next(self):
+        n = self._total_pages()
+        if self._page < n:
+            self._sync_page_to_rows()
+            self._page += 1
+            self._render_page()
+            self._update_pager()
+
+    def _goto_page(self):
+        try:
+            p = int(self.page_var.get())
+        except (ValueError, tk.TclError):
+            messagebox.showinfo(self._t("at_page_goto"), self._t("at_page_bad"))
+            return
+        n = self._total_pages()
+        if p < 1 or p > n:
+            messagebox.showinfo(self._t("at_page_goto"), self._t("at_page_bad"))
+            self.page_var.set(str(self._page))
+            return
+        if p != self._page:
+            self._sync_page_to_rows()
+            self._page = p
+        self._render_page()
+        self._update_pager()
+
+    def _add_page(self):
+        """追加 PAGE_SIZE 空行，并跳到新增页，便于直接操作下一页。"""
+        self._sync_page_to_rows()
+        self._rows.extend([StressRow(enabled=False) for _ in range(PAGE_SIZE)])
+        self._page = self._total_pages()
+        self._render_page()
+        self._update_pager()
+
+    def _update_pager(self):
+        n = self._total_pages()
+        if self._page > n:
+            self._page = n
+        self.page_var.set(str(self._page))
+        self.page_lbl.configure(text=self._t("at_page_of", p=self._page, n=n))
+        self.prev_btn.configure(state="normal" if self._page > 1 else "disabled")
+        self.next_btn.configure(state="normal" if self._page < n else "disabled")
+
+    def _toggle_select_all(self):
+        sel = self.sel_all_var.get()
+        for v in self._row_vars:
+            v["sel"].set(sel)
+
+    def _toggle_hex_all(self):
+        val = self.hex_all_var.get()
+        for v in self._row_vars:
+            v["hex"].set(val)
+
+    def _toggle_enter_all(self):
+        val = self.enter_all_var.get()
+        for v in self._row_vars:
+            v["enter"].set(val)
+
+    def _apply_type_all(self, _evt=None):
+        val = self.type_all_var.get()
+        if not val:
+            return
+        for v in self._row_vars:
+            v["type"].set(val)
+
+    def _apply_suffix_all(self, _evt=None):
+        val = self.suffix_all_var.get()
+        if not val:
+            return
+        for v in self._row_vars:
+            v["suffix"].set(val)
+
+    # ---------- rules editor ----------
+    def _rules_total_pages(self):
+        return max(1, math.ceil(len(self._rules) / RULES_PER_PAGE))
+
+    def _build_rules_editor(self):
+        self._rules_page = max(1, min(getattr(self, '_rules_page', 1), self._rules_total_pages()))
+        self._pin_rules_height()
+        for w in self._rules_rows.winfo_children():
+            w.destroy()
+        # 列权重：表头与各行共用同一列配置，保证对齐、居中
+        self._rules_rows.columnconfigure(0, weight=0, minsize=44)
+        self._rules_rows.columnconfigure(1, weight=1, minsize=120)
+        self._rules_rows.columnconfigure(2, weight=2, minsize=150)
+        self._rules_rows.columnconfigure(3, weight=0, minsize=72)
+        self._rules_rows.columnconfigure(4, weight=0, minsize=44)
+        # 表头（与各列同一列号，居中）
+        for c, _rk in enumerate(["stress_rule_enable", "stress_rule_name",
+                                 "stress_rule_keyword", "stress_rule_target", None]):
+            _rtxt = self._t(_rk) if _rk else ""
+            _rl = ttk.Label(self._rules_rows, text=_rtxt, style="MutedSurface.TLabel")
+            _rl.grid(row=0, column=c, padx=4, pady=3, sticky="nsew")
+            if _rk:
+                self.app._register(_rk, _rl)
+        start = (self._rules_page - 1) * RULES_PER_PAGE
+        page_rules = self._rules[start:start + RULES_PER_PAGE]
+        r_h = getattr(self, '_rule_row_h', 22)
+        for j, rule in enumerate(page_rules):
+            i = start + j
+            r = j + 1
+            en = tk.BooleanVar(value=rule.enabled)
+            tk.Checkbutton(self._rules_rows, variable=en, bg=self._bg(), fg=self._fg(),
+                           activebackground=self._bg(), activeforeground=self._fg(),
+                           selectcolor=self._bg(), highlightthickness=0, bd=0).grid(
+                row=r, column=0, padx=4, pady=3)
+            name_var = tk.StringVar(value=rule.name)
+            ne = ttk.Entry(self._rules_rows, textvariable=name_var)
+            ne.grid(row=r, column=1, padx=4, pady=3, sticky="nsew")
+            kw_var = tk.StringVar(value=rule.keyword)
+            ttk.Entry(self._rules_rows, textvariable=kw_var).grid(
+                row=r, column=2, padx=4, pady=3, sticky="nsew")
+            target_var = tk.StringVar(value=rule.record_to)
+            ttk.Combobox(self._rules_rows, textvariable=target_var,
+                         values=[TARGET_AT, TARGET_DOS, TARGET_BOTH],
+                         state="readonly").grid(row=r, column=3, padx=4, pady=3, sticky="nsew")
+            ttk.Button(self._rules_rows, text="-", width=3,
+                       command=lambda k=i: self._del_rule(k)).grid(row=r, column=4, padx=4, pady=3)
+            self._rules[i]._ui = {"en": en, "name": name_var, "kw": kw_var, "tgt": target_var}
+            r_h = max(r_h, max(int(w.winfo_reqheight()) for w in self._rules_rows.grid_slaves(row=r)))
+        self._rule_row_h = r_h
+        # 空槽位：不可见的等高空占位帧（无任何禁用控件），保持规则区高度恒定
+        for k in range(len(page_rules), RULES_PER_PAGE):
+            sp = ttk.Frame(self._rules_rows, style="Surface.TFrame", height=r_h)
+            sp.grid(row=k + 1, column=0, columnspan=5, padx=4, pady=3, sticky="nsew")
+        # 分页 + 添加规则（固定在 RULES_PER_PAGE+1 行，不挤压下方开始/停止）
+        pager = ttk.Frame(self._rules_rows, style="Surface.TFrame")
+        pager.grid(row=RULES_PER_PAGE + 1, column=0, columnspan=5, sticky="w",
+                   padx=4, pady=(4, 0))
+        _ar = ttk.Button(pager, text=self._t("stress_add_rule"),
+                   command=self._add_rule)
+        _ar.pack(side="left", padx=(0, 12)); self.app._register("stress_add_rule", _ar)
+        _rp = ttk.Button(pager, text=self._t("at_prev"),
+                   command=self._rules_prev)
+        _rp.pack(side="left"); self.app._register("at_prev", _rp)
+        self.rules_page_lbl = ttk.Label(pager, text="", style="MutedSurface.TLabel")
+        self.rules_page_lbl.pack(side="left", padx=(6, 6))
+        _rn = ttk.Button(pager, text=self._t("at_next"),
+                   command=self._rules_next)
+        _rn.pack(side="left"); self.app._register("at_next", _rn)
+        self._update_rules_pager()
+        self._capture_rules_height()
+    def _capture_rules_height(self):
+        """把规则区固定为当前所需高度，重建时不因销毁子件而塌陷/回弹。"""
+        try:
+            if getattr(self, '_rules_rows_h', None) is not None:
+                return
+            self._rules_rows.update_idletasks()
+            h = self._rules_rows.winfo_reqheight()
+            if h:
+                self._rules_rows_h = h
+                self._rules_rows.configure(height=h)
+        except Exception:
+            pass
+
+    def _pin_rules_height(self):
+        h = getattr(self, '_rules_rows_h', None)
+        if h is not None:
+            self._rules_rows.configure(height=h)
+
+    def _update_rules_pager(self):
+        n = self._rules_total_pages()
+        self.rules_page_lbl.configure(text=self._t("at_page_of", p=self._rules_page, n=n))
+
+    def _rules_prev(self):
+        if self._rules_page > 1:
+            self._collect_rules_ui()
+            self._rules_page -= 1
+            self._build_rules_editor()
+
+    def _rules_next(self):
+        if self._rules_page < self._rules_total_pages():
+            self._collect_rules_ui()
+            self._rules_page += 1
+            self._build_rules_editor()
+
+    def _collect_rules_ui(self):
+        for i, rule in enumerate(self._rules):
+            ui = getattr(rule, "_ui", None)
+            if ui:
+                rule.enabled = ui["en"].get()
+                rule.name = ui["name"].get()
+                rule.keyword = ui["kw"].get()
+                rule.record_to = ui["tgt"].get()
+
+    def _add_rule(self):
+        self._collect_rules_ui()
+        self._rules.append(CheckRule(name="", keyword="", record_to=TARGET_DOS,
+                                     as_exception=True, enabled=True))
+        self._rules_page = self._rules_total_pages()
+        self._build_rules_editor()
+
+    def _del_rule(self, idx):
+        self._collect_rules_ui()
+        if 0 <= idx < len(self._rules):
+            del self._rules[idx]
+        self._build_rules_editor()
+
+    # ---------- name edit ----------
+    def _toggle_name_edit(self):
+        if str(self.name_entry["state"]) == "disabled":
+            self.name_entry.configure(state="normal")
+            self.name_btn.config(text=self._t("stress_save"))
+        else:
+            self.name_entry.configure(state="disabled")
+            self.name_btn.config(text=self._t("stress_edit"))
+
+    # ---------- expected dialog ----------
+    def _edit_expected(self, gidx):
+        row = self._rows[gidx]
+        dlg = tk.Toplevel(self)
+        dlg.title(self._t("stress_expected_title"))
+        dlg.transient(self.app.root)
+        dlg.grab_set()
+        # 居中显示 + 可缩放
+        w, h = 640, 670
+        x = (dlg.winfo_screenwidth() - w) // 2
+        y = (dlg.winfo_screenheight() - h) // 3
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        dlg.minsize(470, 560)
+        dlg.resizable(True, True)
+
+        dlg.columnconfigure(0, weight=1)
+        dlg.rowconfigure(2, weight=1)      # 仅输入框随窗口拉伸
+
+        ttk.Label(dlg, text=self._t("stress_expected_hint"),
+                  style="Muted.TLabel").grid(row=0, column=0, sticky="w",
+                                             padx=8, pady=(8, 2))
+
+        # ---- 上窄：匹配示例（随「匹配模式」联动变化） ----
+        ex_box = ttk.Frame(dlg, style="TFrame")
+        ex_box.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+        ex_box.columnconfigure(0, weight=1)
+        ttk.Label(ex_box, text=self._t("stress_expected_example"),
+                  style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        # 示例区：等宽字体小一档 + 7 行，保证每条示例都完整可见（不折行被截）
+        ex_font = self._out_font().copy()
+        ex_font.configure(size=max(8, int(self._out_font().cget("size")) - 1))
+        ex_text = tk.Text(ex_box, height=7, wrap="word", padx=6, pady=4,
+                          font=ex_font,
+                          bg="#EEF1F6", fg="#1B2733", relief="flat",
+                          highlightthickness=1, highlightbackground="#D9DEE8",
+                          highlightcolor="#D9DEE8", state="disabled")
+        ex_vsb = ttk.Scrollbar(ex_box, orient="vertical", command=ex_text.yview)
+        ex_text.configure(yscrollcommand=ex_vsb.set)
+        ex_text.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ex_vsb.grid(row=1, column=1, sticky="ns", pady=(2, 0))
+
+        # ---- 下宽：预期结果输入框（随窗口拉伸） ----
+        txtbox = ttk.Frame(dlg, style="TFrame")
+        txtbox.grid(row=2, column=0, sticky="nsew", padx=8, pady=4)
+        txtbox.columnconfigure(0, weight=1)
+        txtbox.rowconfigure(0, weight=1)
+        text = tk.Text(txtbox, height=8, width=52, padx=4, pady=4,
+                       undo=True, wrap="word")
+        vsb = ttk.Scrollbar(txtbox, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=vsb.set)
+        text.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        text.insert("1.0", row.expected)
+
+        # ---- 测试区：发送该行 AT 命令并即时比对预期（对话框下半部分） ----
+        tbox = ttk.Frame(dlg, style="TFrame")
+        tbox.grid(row=3, column=0, sticky="ew", padx=8, pady=(2, 2))
+        tbox.columnconfigure(1, weight=1)
+        ttk.Label(tbox, text=self._t("stress_test_section"),
+                  style="Muted.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Label(tbox, text=self._t("stress_test_at"),
+                  style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        at_var = tk.StringVar(value=self._row_at_text(gidx, row))
+        ttk.Entry(tbox, textvariable=at_var).grid(row=1, column=1, sticky="ew",
+                                                 padx=(6, 6), pady=(2, 0))
+        test_btn = ttk.Button(tbox, text=self._t("stress_test_send"))
+        test_btn.grid(row=1, column=2, sticky="e", pady=(2, 0), padx=(0, 4))
+        fill_btn = ttk.Button(tbox, text=self._t("stress_test_fill"), state="disabled")
+        fill_btn.grid(row=1, column=3, sticky="e", pady=(2, 0))
+        res_font = self._out_font().copy()
+        res_font.configure(size=max(8, int(self._out_font().cget("size")) - 1))
+        verdict_font = res_font.copy()
+        verdict_font.configure(weight="bold")
+        res = tk.Text(tbox, height=5, wrap="word", padx=6, pady=4, font=res_font,
+                      bg="#FFFFFF", fg="#1B2733", relief="flat",
+                      highlightthickness=1, highlightbackground="#D9DEE8",
+                      highlightcolor="#D9DEE8", state="disabled")
+        res.tag_configure("dim", foreground=self.P["muted"])
+        res.tag_configure("ok", foreground=self.P["success"], font=verdict_font)
+        res.tag_configure("fail", foreground=self.P["danger"], font=verdict_font)
+        res_vsb = ttk.Scrollbar(tbox, orient="vertical", command=res.yview)
+        res.configure(yscrollcommand=res_vsb.set)
+        res.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        res_vsb.grid(row=2, column=3, sticky="ns", pady=(4, 0))
+        try:
+            self.app._install_select_menu(res)   # 结果框支持右键复制/全选
+        except Exception:
+            pass
+        ttk.Label(tbox, text=self._t("stress_test_hint"),
+                  style="Muted.TLabel").grid(row=3, column=0, columnspan=4, sticky="w")
+        target = ttk.Label(tbox, text="", style="Muted.TLabel")
+        target.grid(row=4, column=0, columnspan=4, sticky="w")
+
+        def refresh_target(*_):
+            """这次会把命令按什么方式、发到哪个串口（跟随该行的类型/后缀）。"""
+            port = getattr(self, "_active_port", None) or self._t("stress_test_port_closed")
+            target.configure(text=self._t("stress_test_target", t=row.effective_type,
+                                          s=row.effective_suffix, port=port))
+        refresh_target()
+        dlg._test_at_var = at_var
+        dlg._test_btn = test_btn
+        dlg._test_fill = fill_btn
+        dlg._test_res = res
+        dlg._test_target = target
+        dlg._expected_text = text
+
+        # 下拉里放的是本地化标签（包含/正则/全等），初值也必须用标签：
+        # 用模式码初始化会让「不动下拉就保存」把正则/全等静默降级成包含。
+        mode_var = tk.StringVar(value=self._t(MATCH_MODE_KEYS[row.match_mode]))
+        line = ttk.Frame(dlg)
+        line.grid(row=5, column=0, sticky="w", padx=8, pady=2)
+        ttk.Label(line, text=self._t("stress_expected_mode"), style="Muted.TLabel").pack(side="left")
+        mode_labels = {m: self._t(MATCH_MODE_KEYS[m]) for m in MATCH_MODES}
+
+        def mode_of(label):
+            for m in MATCH_MODES:
+                if mode_labels[m] == label:
+                    return m
+            return MATCH_MODES[0]
+
+        def refresh_example(*_):
+            """示例区随匹配模式联动（上窄区域）。"""
+            m = mode_of(mode_var.get())
+            ex_text.configure(state="normal")
+            ex_text.delete("1.0", "end")
+            ex_text.insert("1.0", self._t("stress_ex_" + m))
+            ex_text.configure(state="disabled")
+
+        combo = ttk.Combobox(line, textvariable=mode_var,
+                             values=[mode_labels[m] for m in MATCH_MODES],
+                             width=8, state="readonly")
+        combo.pack(side="left", padx=(6, 0))
+        combo.bind("<<ComboboxSelected>>", refresh_example)
+        refresh_example()
+
+        # 测试/调试入口（示例区与刷新函数）
+        dlg._mode_var = mode_var
+        dlg._example_text = ex_text
+        dlg._refresh_example = refresh_example
+        # ---- 测试逻辑（非阻塞：after 轮询 + 面板读线程捕获） ----
+        def _set_res(msg, tag=None, replace=True):
+            res.configure(state="normal")
+            if replace:
+                res.delete("1.0", "end")
+            res.insert("end", msg, (tag,) if tag else ())
+            res.see("end")
+            res.configure(state="disabled")
+
+        last = {"resp": ""}
+
+        def _finish_test(cap, cmd):
+            test_btn.configure(state="normal")
+            self._stop_test_capture()
+            got = cap["buf"].decode("utf-8", "replace")
+            exp = text.get("1.0", "end-1c").strip()
+            mode = mode_of(mode_var.get())
+            mode_lbl = self._t(MATCH_MODE_KEYS[mode])
+            last["resp"] = got
+            fill_btn.configure(state="normal" if got else "disabled")
+            _set_res("%s %s\n%s\n" % (self._t("stress_test_resp"), cmd,
+                                        got.rstrip("\n") if got else self._t("stress_test_noresp")),
+                     "dim")
+            if cap.get("err"):            # 串口错误/掉线：直接给出原因，不再等超时
+                _set_res(str(cap["err"]), "fail", replace=False)
+            elif not got:
+                _set_res(self._t("stress_test_noresp"), "fail", replace=False)
+            elif not exp:
+                _set_res(self._t("stress_test_noexp"), "dim", replace=False)
+            elif match_expected(got, exp, mode):
+                _set_res(self._t("stress_test_pass", mode=mode_lbl, exp=exp),
+                         "ok", replace=False)
+            else:
+                _set_res(self._t("stress_test_fail", mode=mode_lbl, exp=exp),
+                         "fail", replace=False)
+
+        def do_test():
+            cmd = at_var.get().strip()
+            if self._running:
+                _set_res(self._t("stress_test_busy"), "fail")
+                return
+            if not cmd:
+                _set_res(self._t("stress_test_empty"), "fail")
+                return
+            if not self.core.is_open:
+                _set_res(self._t("stress_no_port"), "fail")
+                return
+            cmd, errs = self.app.expand_macros(cmd)   # 测试命令也支持宏
+            if errs:
+                _set_res(self._t("macro_expand_err", name=errs[0][0],
+                                 e=errs[0][1]), "fail")
+                return
+            if not cmd.strip():
+                _set_res(self._t("stress_test_empty"), "fail")
+                return
+            try:
+                # 与该行压测时一致：跟随行的 类型/后缀（HEX 行按 HEX 发）
+                raw = codec.encode(cmd.strip(), row.effective_type, row.effective_suffix)
+            except ValueError as exc:
+                _set_res(self._t("encode_bad", e=exc), "fail")
+                return
+            cap = self._start_test_capture()
+            test_btn.configure(state="disabled")
+            _set_res(self._t("stress_test_wait"), "dim")
+            t0 = time.monotonic()
+            try:
+                self.core.write(raw)
+            except Exception as exc:
+                self._stop_test_capture()
+                test_btn.configure(state="normal")
+                _set_res(self._t("send_fail", e=exc), "fail")
+                return
+            try:
+                timeout_ms = int(self.timeout_var.get() or DEFAULT_TIMEOUT_MS)
+            except Exception:
+                timeout_ms = DEFAULT_TIMEOUT_MS
+
+            def tick():
+                if not dlg.winfo_exists():
+                    self._stop_test_capture()
+                    return
+                now = time.monotonic()
+                elapsed = (now - t0) * 1000
+                idle = (now - cap["last"]) * 1000 if cap["last"] else 0.0
+                if cap.get("err"):          # 串口掉线/异常：立刻收尾
+                    _finish_test(cap, cmd)
+                    return
+                if cap["buf"] and idle >= RESP_IDLE_MS:
+                    _finish_test(cap, cmd)
+                    return
+                if elapsed >= timeout_ms:
+                    _finish_test(cap, cmd)
+                    return
+                dlg.after(POLL_MS, tick)
+
+            dlg.after(POLL_MS, tick)
+
+        def fill_expected():
+            """把刚收到的返回结果填进预期（只改对话框文本，点「保存」才落盘）。"""
+            got = last.get("resp", "")
+            if not got:
+                return
+            text.delete("1.0", "end")
+            text.insert("1.0", got.strip())
+            _set_res(self._t("stress_test_fill_done"), "dim", replace=False)
+
+        test_btn.configure(command=do_test)
+        fill_btn.configure(command=fill_expected)
+        dlg._do_test = do_test
+        dlg.bind("<Destroy>", lambda e: (self._stop_test_capture()
+                                         if e.widget is dlg else None), add="+")
+
+
+        def ok():
+            row.expected = text.get("1.0", "end-1c").strip()
+            row.match_mode = mode_of(mode_var.get())
+            self._sync_expected_display(gidx)
+            dlg.destroy()
+
+        dlg._ok = ok          # 测试入口：等价于点「保存」
+
+        # 两个按钮两种背景色：保存=主色蓝（主操作）、退出=中性灰
+        # （退出只是关掉对话框、不丢已保存内容，所以不用红，避免误读为危险操作）
+        st = ttk.Style(dlg)
+        st.configure("ExpSave.TButton", background=self.P["primary"],
+                     foreground="#FFFFFF", padding=(12, 4))
+        st.map("ExpSave.TButton",
+               background=[("active", self.P["primary_h"]),
+                           ("pressed", self.P["primary_h"])],
+               foreground=[("active", "#FFFFFF")])
+        st.configure("ExpExit.TButton", background=self.P["muted"],
+                     foreground="#FFFFFF", padding=(12, 4))
+        st.map("ExpExit.TButton",
+               background=[("active", "#49556B"), ("pressed", "#49556B")],
+               foreground=[("active", "#FFFFFF")])
+
+        btns = ttk.Frame(dlg)
+        btns.grid(row=6, column=0, sticky="e", padx=8, pady=8)
+        ttk.Button(btns, text=self._t("at_save"), command=ok,
+                   style="ExpSave.TButton").pack(side="right")
+        ttk.Button(btns, text=self._t("menu_exit"), command=dlg.destroy,
+                   style="ExpExit.TButton").pack(side="right", padx=(0, 6))
+        text.focus_set()
+
+    def _row_at_text(self, gidx, row):
+        """该行当前（界面上）的 AT 命令文本，优先取实时输入框的值。"""
+        v = next((x for x in self._row_vars if x.get("gidx") == gidx), None)
+        if v is not None:
+            try:
+                cur = v["txt"].get().strip()
+            except Exception:
+                cur = ""
+            if cur:
+                return cur
+        return str(getattr(row, "txt", "") or "")
+
+    def _start_test_capture(self):
+        """开始捕获接收数据（由 _poll_rx 追加，和面板共用同一个读线程）。"""
+        cap = {"buf": b"", "last": None}
+        self._test_cap = cap
+        return cap
+
+    def _stop_test_capture(self):
+        self._test_cap = None
+
+    def _mark_test_error(self, reason=None):
+        """等待响应期间串口异常/掉线：让「测试」立刻结束并给出原因。"""
+        cap = getattr(self, "_test_cap", None)
+        if cap is not None and not cap.get("err"):
+            cap["err"] = reason or self._t("port_lost")
+
+    def _sync_expected(self, gidx):
+        """预期结果输入框直接编辑：写回 _rows[gidx].expected。"""
+        if self._syncing:
+            return
+        v = next((x for x in self._row_vars if x.get("gidx") == gidx), None)
+        if v is None or gidx >= len(self._rows):
+            return
+        self._rows[gidx].expected = v["expected"].get().strip()
+
+    def _sync_expected_display(self, gidx):
+        # 程序中刷新显示时用 _syncing 防写回覆盖多行原始值
+        self._syncing = True
+        try:
+            for v in self._row_vars:
+                if v.get("gidx") == gidx:
+                    v["expected"].set(self._expected_summary(self._rows[gidx].expected))
+                    return
+        finally:
+            self._syncing = False
+
+    # ------------------------------------------------------------
+    # 数据收集
+    # ------------------------------------------------------------
+    def _collect_rows(self):
+        """把当前页值写回 _rows，返回所有勾选(参与压测)的非空行。"""
+        self._sync_page_to_rows()
+        rows = []
+        for r in self._rows:
+            if r.enabled and r.txt.strip():
+                if not str(r.expected or "").strip():
+                    r.expected = "OK"   # 默认预期 OK：空预期的行也参与结果对比
+                rows.append(r)
+        return rows
+
+    # ------------------------------------------------------------
+    # 串口
+    # ------------------------------------------------------------
+    def _refresh_ports(self):
+        self._port_map = {}
+        displays = []
+        for device, display in self.core.list_ports():
+            self._port_map[display] = device
+            displays.append(display)
+        self.port_combo["values"] = displays
+        if displays and not self.port_var.get():
+            self.port_var.set(displays[0])
+
+    def _gather_params(self):
+        baud = int(self.baud_var.get())
+        data_bits = int(self.databits_var.get())
+        parity = {"None (N)": "N", "Even (E)": "E", "Odd (O)": "O",
+                  "Mark (M)": "M", "Space (S)": "S"}[self.parity_var.get()]
+        stop_bits = float(self.stopbits_var.get())
+        rtscts, xonxoff = {"None": (False, False), "RTS/CTS": (True, False),
+                           "XON/XOFF": (False, True)}[self.flow_var.get()]
+        return baud, data_bits, parity, stop_bits, rtscts, xonxoff
+
+    def _toggle_port(self):
+        if self.core.is_open:
+            self.core.close()
+            self._active_port = None
+            self.open_btn.config(text=self._t("open"))
+            return
+        display = self.port_var.get().strip()
+        if not display:
+            return
+        port = self._port_map.get(display, display)
+        try:
+            baud, data_bits, parity, stop_bits, rtscts, xonxoff = self._gather_params()
+            self.core.open(port, baudrate=baud, bytesize=data_bits, parity=parity,
+                           stopbits=stop_bits, rtscts=rtscts, xonxoff=xonxoff)
+            self._active_port = port
+            self._disconnecting = False
+            self._presence_tick = 0
+            self.core.set_dtr(self.dtr_var.get())
+            self.core.set_rts(self.rts_var.get())
+            self.open_btn.config(text=self._t("close"))
+        except Exception as exc:
+            messagebox.showerror(self._t("stress_open_fail", e=exc), str(exc))
+
+    def _check_port_presence(self):
+        port = self._active_port
+        if not port:
+            return
+        if "://" in port:      # loop:// 等虚拟端口不被列举，跳过
+            return
+        present = any(dev == port for dev, _ in self.core.list_ports())
+        if not present:
+            self._on_port_lost(self._t("port_lost"))
+
+    def _on_port_lost(self, reason=None):
+        if self._disconnecting:
+            return
+        self._disconnecting = True
+        try:
+            self.core.close()
+            self._active_port = None
+            self.open_btn.config(text=self._t("open"))
+            self._render_note((reason or self._t("port_lost")) + "\n")
+            self._refresh_ports()
+        finally:
+            self._disconnecting = False
+
+    # ------------------------------------------------------------
+    # 接收轮询（主线程 after）
+    # ------------------------------------------------------------
+    def _poll_rx(self):
+        try:
+            for kind, payload in self.core.drain():
+                if kind == SerialCore.RX_DATA:
+                    self._rx_display_buf.extend(payload)
+                    self._rx_last = time.monotonic()   # 用真实接收时刻驱动显示静默聚合
+                    if getattr(self, "_test_cap", None) is not None:
+                        # 预期结果对话框的「测试」正在等这个响应（共用读线程，不另开读口）
+                        cap = self._test_cap
+                        cap["buf"] = cap["buf"] + payload
+                        cap["last"] = time.monotonic()
+                    if self._running and self._phase == "wait":
+                        self._resp_buf.extend(payload)
+                        self._resp_last = time.monotonic()
+                elif kind == SerialCore.RX_ERROR:
+                    self._mark_test_error(str(payload))
+                    self._on_port_lost(str(payload))
+                elif kind == SerialCore.RX_CLOSED:
+                    self._mark_test_error()
+                    self._on_port_lost()
+            if self._rx_display_buf and (time.monotonic() - self._rx_last) * 1000 >= RESP_IDLE_MS:
+                self._flush_display()
+            # 周期性探测：串口被拔出/设备消失时主动断开，恢复为“打开串口”
+            if self.core.is_open and self._active_port:
+                self._presence_tick += 1
+                if self._presence_tick >= self._presence_check_interval:
+                    self._presence_tick = 0
+                    self._check_port_presence()
+        except Exception:
+            pass
+        finally:
+            self._poll_job = self.after(POLL_MS, self._poll_rx)
+
+    # 输出 / 日志（AT Log）
+    def _render_note(self, text):
+        try:
+            self.output.configure(state="normal")
+            self.output.insert("end", text)
+            self.output.see("end")
+        finally:
+            self.output.configure(state="normal")
+
+    def _log_round_marker(self, n):
+        """每轮开始的分隔标记：写入 AT Log 与输出框（与 TX/RX 落点一致）。"""
+        line = "=================== Runtimes %d ===================\n" % n
+        self._render_note(line)
+        if self.logger_at.active:
+            self.logger_at.log(line.rstrip("\n"))
+
+    def _render_line(self, direction, raw):
+        now = datetime.datetime.now()
+        ts = "[%s:%03d]" % (now.strftime("%Y-%m-%d_%H:%M:%S"), now.microsecond // 1000)
+        parts = []
+        if self.show_ts.get():
+            parts.append(ts)
+        if self.show_dir.get():
+            parts.append(direction)
+        body = codec.display_body(raw, self.show_hex.get(), self.show_crlf.get())
+        if body:
+            parts.append(body)
+        line = "  ".join(parts) + "\n"
+        self._render_note(line)
+        if self.logger_at.active and direction in ("TX", "RX"):
+            self.logger_at.log(line.rstrip("\n"))
+
+    def _flush_display(self):
+        data = bytes(self._rx_display_buf)
+        self._rx_display_buf.clear()
+        # 按换行拆分，每条完整行独立渲染（与 AT 面板逐行读取一致）
+        while data:
+            idx = data.find(b"\n")
+            if idx < 0:
+                self._render_line("RX", data)
+                break
+            self._render_line("RX", data[:idx + 1])
+            data = data[idx + 1:]
+
+    def _clear_output(self):
+        try:
+            self.output.configure(state="normal")
+            self.output.delete("1.0", "end")
+        finally:
+            self.output.configure(state="normal")
+
+    # ------------------------------------------------------------
+    # 导入导出 / Log 选择
+    # ------------------------------------------------------------
+    def _choose_log(self, tag):
+        path = filedialog.asksaveasfilename(
+            title=self._t("stress_log_sel"), defaultextension=".log",
+            initialfile=f"stress_{datetime.datetime.now():%Y%m%d_%H%M%S}.log")
+        if path:
+            (self.at_log_var if tag == "at" else self.dos_log_var).set(path)
+
+    def _export_template(self):
+        path = filedialog.asksaveasfilename(
+            title=self._t("stress_export_tpl"),
+            defaultextension=".xlsx", initialfile="stress_template.xlsx",
+            filetypes=[("Excel 模板", "*.xlsx"), ("CSV", "*.csv"), ("TXT", "*.txt"), ("All", "*.*")])
+        if path:
+            if stress_io.export_template(path):
+                messagebox.showinfo(self._t("stress_export_tpl"), f"OK → {path}")
+            else:
+                messagebox.showerror(
+                    self._t("stress_export_tpl"),
+                    "导出失败\n.xlsx 需 openpyxl（可 pip install openpyxl）")
+
+    def _import_data(self):
+        path = filedialog.askopenfilename(
+            title=self._t("stress_import"),
+            filetypes=[("TXT", "*.txt"), ("Excel", "*.xlsx"), ("CSV", "*.csv"), ("All", "*.*")])
+        if not path:
+            return
+        rows = stress_io.import_data(path)
+        if not rows:
+            messagebox.showinfo(self._t("stress_import"), self._t("stress_no_data"))
+            return
+        self._rows = [StressRow.from_dict(r) for r in rows]
+        while len(self._rows) < PAGE_SIZE:
+            self._rows.append(StressRow(enabled=False))
+        self._page = 1
+        self._render_page()
+        self._update_pager()
+
+    def _export_data(self):
+        self._sync_page_to_rows()
+        rows = [r.to_dict() for r in self._rows]
+        path = filedialog.asksaveasfilename(
+            title=self._t("stress_export"),
+            defaultextension=".txt", initialfile="stress_data.txt",
+            filetypes=[("TXT", "*.txt"), ("Excel", "*.xlsx"), ("CSV", "*.csv"), ("All", "*.*")])
+        if path:
+            if stress_io.export_data(path, rows):
+                messagebox.showinfo(self._t("stress_export"), f"OK → {path}")
+            else:
+                messagebox.showerror(self._t("stress_export"), "write failed")
+
+    # ------------------------------------------------------------
+    # 结束条件 / 归一化
+    # ------------------------------------------------------------
+    def _clear_at_list(self):
+        """一键清空当前 AT list 的全部 AT 命令（仅操作内存中的行，不涉及
+        模板文件、不涉及用户即将导入的文件内容）。清空后保留行结构。"""
+        if not messagebox.askyesno(
+                self._t("stress_clear"), self._t("stress_clear_confirm")):
+            return
+        self._rows = [StressRow(enabled=False, expected="", interval_ms=300) for _ in self._rows]
+        self._page = 1
+        self.page_var.set("1")
+        self._render_page()
+        self._update_pager()
+
+    def _sync_end_mode(self):
+        pass
+
+    def _norm_count(self):
+        try:
+            v = int(self.count_var.get())
+        except (ValueError, tk.TclError):
+            v = 1
+        self.count_var.set(max(1, min(v, 9999)))
+
+    def _norm_interval(self):
+        try:
+            v = int(self.interval_var.get())
+        except (ValueError, tk.TclError):
+            v = 0
+        self.interval_var.set(max(MIN_INTERVAL_MS, min(v, MAX_INTERVAL_MS)))
+
+    def _norm_timeout(self):
+        try:
+            v = int(self.timeout_var.get())
+        except (ValueError, tk.TclError):
+            v = DEFAULT_TIMEOUT_MS
+        self.timeout_var.set(max(100, min(v, MAX_TIMEOUT_MS)))
+
+    def _target_seconds(self) -> float:
+        try:
+            return max(0.0, float(self.time_min_var.get() or 0) * 3600.0)
+        except ValueError:
+            return 0.0
+
+    # ------------------------------------------------------------
+    # 运行
+    # ------------------------------------------------------------
+    def _set_run_round(self):
+        """运行期间按钮显示当前正在执行的轮次数字（1,2,3,...）。"""
+        self.run_btn.config(text=str(self._rounds_done + 1))
+
+    def _start_run(self):
+        if self._running:
+            return
+        rows = self._collect_rows()
+        if not rows:
+            messagebox.showinfo(self._t("stress_start"), self._t("stress_no_rows"))
+            return
+        if not self.core.is_open:
+            messagebox.showinfo(self._t("stress_start"), self._t("stress_no_port"))
+            return
+        self._rows_run = rows
+        self._row_idx = 0
+        self._rounds_done = 0
+        self._stats = stress_model.RunStats(start_time=datetime.datetime.now(),
+                                            end_time=None)
+        self._start_mono = time.monotonic()
+        self._resp_buf.clear()
+        self._running = True
+        self._phase = "send"
+        self.run_btn.config(state="disabled")
+        self._set_run_round()
+        self.stop_btn.config(state="normal")
+        self._update_run_info()
+        self._start_logs()
+        self._update_stats()
+        self._tick_stats()
+        self._send_current()
+
+    def _start_logs(self):
+        at = self.at_log_var.get().strip()
+        dos = self.dos_log_var.get().strip()
+        header = self._header_line()
+        if at:
+            self.logger_at.start(at)
+            self.logger_at.log(header)
+        if dos:
+            self.logger_dos.start(dos)
+            self.logger_dos.log(header)
+
+    def _header_line(self):
+        name = self.name_var.get().strip() or "-"
+        end = ("%s=%s" % (self._t("stress_end_count"), self.count_var.get())
+               if self.end_mode_var.get() == "count"
+               else "%s=%s%s" % (self._t("stress_end_time"),
+                                 self.time_min_var.get(), self._t("stress_time_unit")))
+        return (f"=== {self._t('stress_name')}:{name} | {end}"
+                f" | {self._t('stress_interval')}:{self.interval_var.get()}"
+                f" | {self._t('stress_timeout')}:{self.timeout_var.get()} ===")
+
+    def _stop_logs(self):
+        self.logger_at.stop()
+        self.logger_dos.stop()
+
+    def _row_bytes(self, row: StressRow) -> bytes:
+        t, errs = self.app.expand_macros(row.txt)   # 宏展开
+        if errs:
+            self._render_note(self._t("macro_expand_err", name=errs[0][0],
+                                       e=errs[0][1]) + "\n")
+            return b""
+        try:
+            return codec.encode(t, row.effective_type, row.effective_suffix)
+        except ValueError:
+            return b""
+
+    def _send_current(self):
+        if not self._running:
+            return
+        if self._row_idx == 0:
+            self._log_round_marker(self._rounds_done + 1)
+        if self._row_idx >= len(self._rows_run):
+            self._advance()
+            return
+        row = self._rows_run[self._row_idx]
+        raw = self._row_bytes(row)
+        if raw:
+            try:
+                n = self.core.write(raw)
+                self._stats.sent_lines += 1
+                self._stats.current_line = self._row_idx + 1
+                self._render_line("TX", raw)
+                self._rx_last = time.monotonic()
+            except Exception as exc:
+                self._render_note(f"[send fail] {exc}\n")
+        self._phase = "wait"
+        self._resp_buf.clear()
+        self._resp_start = time.monotonic()
+        self._resp_last = time.monotonic()
+        self._schedule_wait(0)
+
+    def _schedule_wait(self, delay):
+        if self._job:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+        self._job = self.after(delay, self._wait_tick)
+
+    def _wait_tick(self):
+        if not self._running or self._phase != "wait":
+            return
+        now = time.monotonic()
+        elapsed_ms = (now - self._resp_start) * 1000
+        idle_ms = (now - self._resp_last) * 1000
+        timeout = self.timeout_var.get()
+        if (self._resp_buf and idle_ms >= RESP_IDLE_MS) or elapsed_ms >= timeout:
+            self._finish_response()
+            return
+        self._schedule_wait(POLL_MS)
+
+    def _finish_response(self):
+        row = self._rows_run[self._row_idx]
+        response = bytes(self._resp_buf)
+        text = codec.decode_display(response, self.show_hex.get()).strip()
+        if row.has_expected and not match_expected(text, row.expected, row.match_mode):
+            self._stats.errors += 1
+            self._log_dos(row, text, self._t("stress_mismatch"))
+        self._collect_rules_ui()
+        hits = run_check_rules(text, self._rules)
+        for rule, _ in hits:
+            if rule.as_exception:
+                self._stats.errors += 1
+            self._log_rule(rule, row, text)
+        self._resp_buf.clear()
+        self._row_idx += 1
+        self._advance()
+
+    def _log_dos(self, row, response, reason):
+        line = (f"DOS| {reason} | 发送:{row.txt.strip()}"
+                f" 类型:{row.effective_type} 后缀:{row.effective_suffix}"
+                f" 预期:{row.expected!r} → 实际:{response!r}")
+        self._log_dos_line(line)
+        self._render_note(f"    ⚠ {line}\n")
+
+    def _log_rule(self, rule, row, response):
+        line = (f"DOS| check规则[{rule.name or rule.keyword}] 命中"
+                f" | 发送:{row.txt.strip()} → 响应:{response!r}")
+        if rule.record_to in (TARGET_AT, TARGET_BOTH) and self.logger_at.active:
+            self.logger_at.log(line)
+        if rule.record_to in (TARGET_DOS, TARGET_BOTH):
+            self._log_dos_line(line)
+        self._render_note(f"    ⚠ {line}\n")
+
+    def _log_dos_line(self, line):
+        if self.logger_dos.active:
+            self.logger_dos.log(line)
+
+    def _advance(self):
+        if not self._running:
+            return
+        if self._row_idx >= len(self._rows_run):
+            self._rounds_done += 1
+            self._row_idx = 0
+        elapsed = time.monotonic() - self._start_mono
+        if compute_end_condition(self._rounds_done, self.end_mode_var.get(),
+                                 self.count_var.get(), elapsed, self._target_seconds()):
+            self._stop_run(finished=True)
+            return
+        self._set_run_round()
+        interval = self.interval_var.get()
+        # 行自身间隔优先：本次刚执行完的那一行设置了 interval_ms(>0) 则覆盖全局行间隔
+        # （_row_idx 已递增/归零：正常时刚执行行=idx-1，一轮刚结束归零时=最后一行）
+        prev_idx = self._row_idx - 1 if self._row_idx > 0 else len(self._rows_run) - 1
+        if 0 <= prev_idx < len(self._rows_run):
+            row_ms = self._rows_run[prev_idx].interval_ms
+            if row_ms > 0:
+                interval = row_ms
+        self._schedule_follow(interval, self._send_current)
+
+    def _schedule_follow(self, delay, fn):
+        if self._job:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+        self._job = self.after(delay, fn)
+
+    def _stop_run(self, finished=False):
+        if not self._running:
+            self.run_btn.config(state="normal", text=self._t("stress_start"))
+            self.stop_btn.config(state="disabled")
+            self.run_info_lbl.configure(text="")
+            return
+        self._running = False
+        self._phase = "idle"
+        if self._job:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+            self._job = None
+        self.run_btn.config(state="normal", text=self._t("stress_start"))
+        self.stop_btn.config(state="disabled")
+        self.run_info_lbl.configure(text="")
+        self._stats.end_time = datetime.datetime.now()
+        self._stats.current_line = 0
+        self._flush_display()
+        self._append_summary()
+        self._stop_logs()
+        self._update_stats()
+        if finished:
+            self._render_note("== 压测完成 ==\n")
+
+    def _append_summary(self):
+        s = self._stats
+        name = self.name_var.get().strip() or "-"
+        dur = format_duration(
+            (datetime.datetime.now() - s.start_time).total_seconds()
+            if s.start_time else 0.0)
+        window = (format_window(s.start_time, s.end_time)
+                  if s.start_time and s.end_time else "")
+        rounds = s.total_rounds or self._rounds_done
+        block = ("== %s ==\n"
+                 "%s: %s\n"
+                 "%s: %s\n"
+                 "%s: %s\n"
+                 "%s: %s\n"
+                 "%s: %s\n"
+                 "%s: %s\n" % (
+                     self._t("stress_summary"),
+                     self._t("stress_summary_name"), name,
+                     self._t("stress_stats_duration"), dur,
+                     self._t("stress_summary_run"), window,
+                     self._t("stress_stats_rounds"), rounds,
+                     self._t("stress_stats_sent"), s.sent_lines,
+                     self._t("stress_stats_err"), s.errors))
+        self._render_note(block)
+        if self.logger_at.active:
+            self.logger_at.log(block)
+        if self.logger_dos.active:
+            self.logger_dos.log(block)
+
+    # ---------- 统计显示 ----------
+    def _update_stats(self):
+        s = self._stats
+        elapsed = (time.monotonic() - self._start_mono) if self._running else 0.0
+        dur = format_duration(elapsed)
+        window = ""
+        if s.start_time:
+            end = s.end_time or datetime.datetime.now()
+            window = format_window(s.start_time, end)
+        text = (f"{self._t('stress_stats_sent')}: {s.sent_lines}             "
+                f"{self._t('stress_stats_err')}: {s.errors}             "
+                f"{self._t('stress_stats_line')}: {s.current_line}\n"
+                f"{self._t('stress_stats_duration')}: {dur}             \n"
+                f"{self._t('stress_stats_rounds')}: {self._rounds_done}\n"
+                f"{self._t('stress_stats_window')}: {window}\n")
+        try:
+            self.stats_text.configure(state="normal")
+            self.stats_text.delete("1.0", "end")
+            self.stats_text.insert("1.0", text)
+        finally:
+            self.stats_text.configure(state="disabled")
+
+    def _tick_stats(self):
+        if self._running:
+            self._update_stats()
+            self._update_run_info()
+            self.after(300, self._tick_stats)
+
+    def _update_run_info(self):
+        try:
+            if self._running and self._stats.start_time is not None:
+                st = self._stats.start_time.strftime("%H:%M:%S")
+                el = max(0.0, time.monotonic() - self._start_mono)
+                eh = int(el // 3600); em = int(el % 3600 // 60); es = int(el % 60)
+                dur = "%02d:%02d:%02d" % (eh, em, es)
+                self.run_info_lbl.configure(text="%s:%s   %s:%s" % (
+                    self._t("stress_start"), st,
+                    self._t("stress_stats_duration"), dur))
+            else:
+                self.run_info_lbl.configure(text="")
+        except Exception:
+            pass
+
+    def _out_font(self):
+        return self.app.out_font
+
+    def _ui_font(self):
+        return self.app.ui_font

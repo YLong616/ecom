@@ -1,0 +1,17 @@
+[
+  {
+    "text": "AT",
+    "hex": false,
+    "enter": true
+  },
+  {
+    "text": "AT+QVERSION",
+    "hex": false,
+    "enter": true
+  },
+  {
+    "text": "AT+CSUB",
+    "hex": false,
+    "enter": true
+  }
+]

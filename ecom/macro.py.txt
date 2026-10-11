@@ -1,0 +1,277 @@
+# -*- coding: utf-8 -*-
+"""宏定义（参数自定义）：把测试数据/参数抽成 ``${name}``，发送时展开为实际内容。
+
+值的两种写法（**默认是"数据模式"，不是数值运算**）：
+
+1. **数据模式（默认）** 字面文本，``*N`` 表示把前面的内容重复 N 次::
+
+       data  = 12345*10        -> "12345" x10  = 50 字节
+       data2 = 12345-1         -> 原样 7 字节（``-`` 就是普通字符）
+       big   = 1234567890*150  -> 1500 字节
+
+2. **表达式模式（以 ``=`` 开头）** 受限 Python 表达式，用自写 AST 求值器（**不用 eval**）::
+
+       = "AB" + "CD"           -> ABCD
+       = "12345" * 10          -> 50 字节
+       = str(1500) + ",x"
+
+安全与边界：只允许字面量、``+ - * // % **``、少量函数（str/int/len/join/repeat/upper/…）；
+禁止 import / 属性访问 / 下标 / 变量引用 / 推导式；结果上限 ``MAX_RESULT_BYTES``（1 MiB），
+字符串重复会**先算长度再构造**，避免 ``"x"*10**9`` 打爆内存。
+
+引用语法：``${name}``（**带 $ 前缀**，name 为字母/数字/下划线且以字母或下划线开头）。
+
+- 花括号 ``{`` ``}`` **就是普通字符**（AT 里常见的 JSON 载荷 ``"{...}"`` 不需要任何转义）；
+- 要写字面 ``$`` 时用 ``$$``；``${不是合法宏名}`` 原样保留。
+
+展开发生在**发送时**，界面与配置文件里始终保留 ``${name}`` 形式；未知宏或求值失败会返回错误，
+调用方应**阻止发送**并提示（避免把错误命令打进模组）。
+"""
+from __future__ import annotations
+
+import ast
+import re
+
+MAX_RESULT_BYTES = 1024 * 1024          # 展开结果上限
+MAX_INTERMEDIATE = 4 * 1024 * 1024      # 中间字符串/序列上限
+MAX_INT_BITS = 4096                     # 中间整数上限（防 10**100000）
+
+# $$ 是转义（写出字面 $）；${name} 是宏引用：名字可以含数字/连字符/中文等任意字符，
+# 只要不含 `}` 与换行（以 `}` 作为结束符，故名字里出现 `}` 就无法被引用）。
+_TOKEN_RE = re.compile(r"\$\$|\$\{([^}\n]+)\}")
+
+
+class MacroError(Exception):
+    """值渲染失败（语法/类型/超限）。"""
+
+
+# ------------------------------------------------------------------ 小工具
+def byte_len(text) -> int:
+    return len(str(text or "").encode("utf-8"))
+
+
+def validate_key(key) -> str | None:
+    """校验宏名：None 合法，否则 'empty' / 'space' / 'bad'。
+
+    允许数字开头、连字符、中文、点号等任意非空白字符；**不允许空格**
+    （`${a b}` 与 `${ab}` 肉眼极易看混），也不允许 `}` 与换行
+    （引用形式 `${...}` 以 `}` 结束）。首尾空白会被忽略。
+    """
+    k = str(key or "").strip()
+    if not k:
+        return "empty"
+    if "}" in k or "\n" in k or "\r" in k:
+        return "bad"        # 结构性非法：} 会破坏定界，换行同理
+    if any(ch.isspace() for ch in k):
+        return "space"      # 空格/制表符等：与相邻名字肉眼易混
+    return None
+
+
+def render_data(expr) -> str:
+    """数据模式：字面文本 + ``*N`` 重复（``*`` 后面不是整数时按普通字符处理）。"""
+    parts = str("" if expr is None else expr).split("*")
+    out = parts[0]
+    for p in parts[1:]:
+        if p.isdigit():
+            n = int(p)
+            if len(out.encode("utf-8")) * max(n, 1) > MAX_RESULT_BYTES:
+                raise MacroError("结果过大（上限 %d 字节）" % MAX_RESULT_BYTES)
+            out = out * n
+        else:
+            out = out + "*" + p
+    if len(out.encode("utf-8")) > MAX_RESULT_BYTES:
+        raise MacroError("结果过大（上限 %d 字节）" % MAX_RESULT_BYTES)
+    return out
+
+
+# ------------------------------------------------- 表达式模式（受限求值）
+def _repeat(text, n):
+    if not isinstance(n, int):
+        raise MacroError("repeat 的第二个参数要是整数")
+    if len(str(text).encode("utf-8")) * max(n, 1) > MAX_RESULT_BYTES:
+        raise MacroError("结果过大（上限 %d 字节）" % MAX_RESULT_BYTES)
+    return str(text) * n
+
+
+_ALLOWED_FUNCS = {
+    "str": str, "int": int, "float": float, "len": len, "abs": abs,
+    "min": min, "max": max, "sum": sum, "hex": hex, "ord": ord, "chr": chr,
+    "list": list, "tuple": tuple, "sorted": sorted, "range": range,
+    "repeat": _repeat,
+    "join": lambda sep, items: str(sep).join(str(x) for x in items),
+    "upper": lambda s: str(s).upper(),
+    "lower": lambda s: str(s).lower(),
+    "strip": lambda s: str(s).strip(),
+    "replace": lambda s, a, b: str(s).replace(str(a), str(b)),
+}
+
+
+def _limit(value):
+    if isinstance(value, str):
+        if len(value) > MAX_INTERMEDIATE:
+            raise MacroError("中间结果过大")
+    elif isinstance(value, int):
+        if value.bit_length() > MAX_INT_BITS:
+            raise MacroError("整数过大")
+    elif isinstance(value, (list, tuple, range)):
+        if len(value) > 1000000:
+            raise MacroError("中间序列过大")
+    return value
+
+
+def _binop(op, a, b):
+    if isinstance(op, ast.Add):
+        if isinstance(a, str) and isinstance(b, str):
+            return _limit(a + b)
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            return _limit(a + b)
+        raise MacroError("+ 只支持两段文本或两个数字")
+    if isinstance(op, ast.Sub):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            return _limit(a - b)
+        raise MacroError("- 只支持数字")
+    if isinstance(op, ast.Mult):
+        if isinstance(a, str) and isinstance(b, int):
+            return _repeat(a, b)
+        if isinstance(b, str) and isinstance(a, int):
+            return _repeat(b, a)
+        if isinstance(a, (list, tuple)) and isinstance(b, int):
+            if len(a) * max(b, 0) > 1000000:
+                raise MacroError("结果过大")
+            return _limit(a * b)
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            return _limit(a * b)
+        raise MacroError("* 只支持 文本*整数 或 数字*数字")
+    if isinstance(op, ast.FloorDiv):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            if b == 0:
+                raise MacroError("除数为 0")
+            return _limit(a // b)
+        raise MacroError("// 只支持数字")
+    if isinstance(op, ast.Mod):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            if b == 0:
+                raise MacroError("除数为 0")
+            return _limit(a % b)
+        raise MacroError("% 只支持数字")
+    if isinstance(op, ast.Pow):
+        if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+            if isinstance(a, int) and isinstance(b, int) and b > 0:
+                if abs(a).bit_length() * b > MAX_INT_BITS:
+                    raise MacroError("幂运算结果过大")
+            return _limit(a ** b)
+        raise MacroError("** 只支持数字")
+    raise MacroError("不支持的运算符")
+
+
+def _ev(node):
+    if isinstance(node, ast.Expression):
+        return _ev(node.body)
+    if isinstance(node, ast.Constant):
+        v = node.value
+        if isinstance(v, (bytes, type(Ellipsis), type(None))) or isinstance(v, bool):
+            if isinstance(v, bool):
+                return "True" if v else "False"
+            raise MacroError("不支持的字面量：%r" % (v,))
+        return _limit(v)
+    if isinstance(node, ast.UnaryOp):
+        v = _ev(node.operand)
+        if isinstance(node.op, ast.USub) and isinstance(v, (int, float)):
+            return -v
+        if isinstance(node.op, ast.UAdd) and isinstance(v, (int, float)):
+            return +v
+        raise MacroError("不支持的一元运算")
+    if isinstance(node, ast.BinOp):
+        return _binop(node.op, _ev(node.left), _ev(node.right))
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name) or node.func.id not in _ALLOWED_FUNCS:
+            raise MacroError("不支持的函数")
+        if node.keywords:
+            raise MacroError("不支持关键字参数")
+        args = [_ev(a) for a in node.args]
+        try:
+            return _limit(_ALLOWED_FUNCS[node.func.id](*args))
+        except MacroError:
+            raise
+        except Exception as exc:
+            raise MacroError("%s() 调用失败：%s" % (node.func.id, exc))
+    if isinstance(node, (ast.List, ast.Tuple)):
+        vals = [_ev(e) for e in node.elts]
+        return vals if isinstance(node, ast.List) else tuple(vals)
+    raise MacroError("不支持的写法：%s" % type(node).__name__)
+
+
+def render_expr(src) -> str:
+    """表达式模式：``=`` 后面的受限 Python 表达式。"""
+    s = str(src or "").strip()
+    if not s:
+        raise MacroError("表达式为空")
+    try:
+        tree = ast.parse(s, mode="eval")
+    except SyntaxError as exc:
+        raise MacroError("语法错误：%s" % (exc.msg or exc))
+    val = _ev(tree)
+    if isinstance(val, float) and float(val).is_integer():
+        val = int(val)
+    text = val if isinstance(val, str) else str(val)
+    if len(text.encode("utf-8")) > MAX_RESULT_BYTES:
+        raise MacroError("结果过大（上限 %d 字节）" % MAX_RESULT_BYTES)
+    return text
+
+
+def render_value(expr) -> tuple[str | None, str | None]:
+    """把宏值渲染成文本。返回 (文本, 错误)；出错时文本为 None。"""
+    raw = "" if expr is None else str(expr)
+    try:
+        if raw.startswith("="):
+            return render_expr(raw[1:]), None
+        return render_data(raw), None
+    except MacroError as exc:
+        return None, str(exc)
+
+
+# ------------------------------------------------------------ 宏表与展开
+def parse_macros(items) -> dict:
+    """[{"key":..,"value":..}, ...] -> {key: value}（跳过非法/重复的宏名）。"""
+    out = {}
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        key = str(it.get("key", "")).strip()
+        if not key or validate_key(key):
+            continue
+        out.setdefault(key, str(it.get("value", "")))
+    return out
+
+
+def expand(text, macros) -> tuple[str, list]:
+    """把 text 里的 ``${name}`` 展开。返回 (结果文本, [(key, 错误), ...])。
+
+    花括号 ``{``/``}`` 是普通字符（JSON 载荷无需转义）；``$$`` 写出字面 ``$``。
+    有错误时调用方**不应发送**（结果文本里会原样保留 ``${name}`` 便于用户定位）。
+    """
+    src = "" if text is None else str(text)
+    out, errors, last = [], [], 0
+    for m in _TOKEN_RE.finditer(src):
+        out.append(src[last:m.start()])
+        tok = m.group(0)
+        if tok == "$$":
+            out.append("$")
+        else:
+            key = m.group(1).strip()
+            if key not in (macros or {}):
+                errors.append((key, "未定义"))
+                out.append(tok)
+            else:
+                val, err = render_value(macros[key])
+                if err:
+                    errors.append((key, err))
+                    out.append(tok)
+                else:
+                    out.append(val)
+        last = m.end()
+    out.append(src[last:])
+    result = "".join(out)
+    if len(result.encode("utf-8")) > MAX_RESULT_BYTES:
+        errors.append(("<展开结果>", "超过 %d 字节" % MAX_RESULT_BYTES))
+    return result, errors

@@ -1,0 +1,19 @@
+# -*- coding: utf-8 -*-
+"""查 PyPI 上 ecom-serial-tool 已发布的版本（决定新版本号）。"""
+import json
+import urllib.request
+
+NAME = "ecom-serial-tool"
+try:
+    with urllib.request.urlopen("https://pypi.org/pypi/%s/json" % NAME, timeout=25) as r:
+        d = json.load(r)
+    rels = sorted(d["releases"].keys())
+    print("包名:", NAME)
+    print("已发布版本:", rels or "（无）")
+    print("最新版本:", d["info"]["version"])
+    print("摘要:", (d["info"].get("summary") or "")[:70])
+    for v in rels[-3:]:
+        files = d["releases"][v]
+        print("  %s: %s" % (v, [f["filename"] for f in files]))
+except Exception as exc:
+    print("查询失败: %s: %s" % (type(exc).__name__, exc))

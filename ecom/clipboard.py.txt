@@ -1,0 +1,157 @@
+# -*- coding: utf-8 -*-
+"""写入系统剪贴板（单一管理者，长文本/忙碌主线程下都可靠）。
+
+为什么不能「在本进程里直接写」——两条路都实测失败：
+
+1) Tk 路径（clipboard_clear + clipboard_append + update）是**延迟渲染**：
+   数据不进全局内存，等外部程序请求时才由主线程响应 WM_RENDERFORMAT 供给。
+   主线程忙于收 Log 时供给不及时，Windows 会丢弃该次请求。
+   实测：400k 字符，主线程忙等 6s 期间外部 OpenClipboard 直接失败，忙完再读为 0 字符
+   ——外部（记事本）粘出来是空白。
+
+2) 在有 Tk 的进程里调 Win32 SetClipboardData（立即渲染）同样不行：
+   Tk 是剪贴板管理者，`CloseClipboard()` 之后我们刚写入的内存块内容立刻被清零
+   （实测：写入后同句柄 len=180000 -> CloseClipboard 后 len=0），剪贴板被 Tk 的
+   未填充数据顶掉。无 Tk 的进程做同样操作则完全正常。
+
+结论（Windows）：把写入交给一个**不 import tkinter 的子进程**，用 Win32 立即渲染，
+写完在子进程内回读校验。数据放在全局内存里，不依赖任何事件循环，子进程退出后仍然可读。
+实测：父进程（Tk GUI）存活且主线程忙等时写入 400k 字符，外部进程完整读到 399996。
+
+其它平台（X11/macOS）：剪贴板由持有者进程持续供给，短命子进程不适用，
+回退到 Tk 管理的剪贴板（widget.clipboard_append + update）。
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+
+# 子进程源码：不 import tkinter；从 stdin 读 UTF-8 文本，Win32 立即渲染写入，
+# 回读校验后向 stdout 打印 "OK <字符数>" / "FAIL ..."。仅用 ASCII 字符。
+_HELPER_SRC = r'''
+import ctypes
+import ctypes.wintypes as wt
+import sys
+
+CF_UNICODETEXT = 13
+GMEM_MOVEABLE = 0x0002
+
+u = ctypes.windll.user32
+k = ctypes.windll.kernel32
+HANDLE = ctypes.c_void_p
+UINT = ctypes.c_uint
+u.OpenClipboard.argtypes = [HANDLE]
+u.OpenClipboard.restype = wt.BOOL
+u.EmptyClipboard.argtypes = []
+u.EmptyClipboard.restype = wt.BOOL
+u.GetClipboardData.argtypes = [UINT]
+u.GetClipboardData.restype = HANDLE
+u.SetClipboardData.argtypes = [UINT, HANDLE]
+u.SetClipboardData.restype = HANDLE
+u.CloseClipboard.argtypes = []
+u.CloseClipboard.restype = wt.BOOL
+k.GlobalAlloc.argtypes = [UINT, ctypes.c_size_t]
+k.GlobalAlloc.restype = HANDLE
+k.GlobalLock.argtypes = [HANDLE]
+k.GlobalLock.restype = HANDLE
+k.GlobalUnlock.argtypes = [HANDLE]
+k.GlobalUnlock.restype = wt.BOOL
+
+
+def write(text):
+    data = text.encode("utf-16-le")
+    h = k.GlobalAlloc(GMEM_MOVEABLE, len(data) + 2)
+    if not h:
+        return False
+    p = k.GlobalLock(h)
+    if not p:
+        return False
+    ctypes.memmove(p, data, len(data))
+    ctypes.memset(p + len(data), 0, 2)
+    k.GlobalUnlock(h)
+    if not u.OpenClipboard(None):
+        return False
+    u.EmptyClipboard()
+    ok = bool(u.SetClipboardData(CF_UNICODETEXT, h))
+    u.CloseClipboard()
+    return ok
+
+
+def read_back():
+    if not u.OpenClipboard(None):
+        return None
+    try:
+        h = u.GetClipboardData(CF_UNICODETEXT)
+        if not h:
+            return None
+        p = k.GlobalLock(h)
+        if not p:
+            return None
+        s = ctypes.wstring_at(p)
+        k.GlobalUnlock(h)
+        return s
+    finally:
+        u.CloseClipboard()
+
+
+text = sys.stdin.buffer.read().decode("utf-8")
+if not write(text):
+    sys.stdout.write("FAIL write")
+else:
+    back = read_back()
+    if back == text:
+        sys.stdout.write("OK %d" % len(text))
+    else:
+        sys.stdout.write("FAIL verify %d" % (-1 if back is None else len(back)))
+'''
+
+_TIMEOUT_S = 8.0            # 单次尝试上限（子进程启动 + 写入 + 回读校验）
+_ATTEMPTS = 2               # 偶发失败（杀软扫描/机器繁忙）重试一次，避免用户复制静默失败
+
+
+def _set_windows(text: str) -> bool:
+    """Windows：交给无 Tk 的子进程写（立即渲染），并校验回读结果。"""
+    if getattr(sys, "frozen", False) or not sys.executable:
+        return False
+    argv = [sys.executable, "-c", _HELPER_SRC]
+    kwargs = {}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if flags:
+        kwargs["creationflags"] = flags
+    want = "OK %d" % len(text)
+    payload = text.encode("utf-8")
+    for _attempt in range(_ATTEMPTS):
+        try:
+            proc = subprocess.run(argv, input=payload,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  timeout=_TIMEOUT_S, **kwargs)
+            out = proc.stdout.decode("utf-8", "replace").strip()
+        except Exception:
+            continue      # 偶发失败 -> 再试一次
+        if out == want:
+            return True
+    return False
+
+
+def _set_tk(widget, text: str) -> bool:
+    """其它平台（以及 Windows 上子进程不可用时的兜底）：Tk 管理剪贴板。"""
+    if widget is None:
+        return False
+    try:
+        widget.clipboard_clear()
+        widget.clipboard_append(text)
+        widget.update_idletasks()
+        widget.update()
+        return True
+    except Exception:
+        return False
+
+
+def set_clipboard(text: str, widget=None) -> bool:
+    """把 text 写入系统剪贴板，成功返回 True。"""
+    if not text:
+        return False
+    if os.name == "nt" and _set_windows(text):
+        return True
+    return _set_tk(widget, text)

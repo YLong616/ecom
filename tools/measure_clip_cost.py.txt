@@ -1,0 +1,37 @@
+# -*- coding: utf-8 -*-
+"""量化：同步调用 set_clipboard（= 旧实现的阻塞时长）vs 异步提交（新实现）在不同文本量级下的耗时。
+
+旧实现（v11）= 主线程同步等子进程写完并回读校验；新实现（v12）= 主线程只入队，跳过这一步。
+"""
+import os
+import sys
+import time
+import tkinter as tk
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ecom import clipboard as clip  # noqa: E402
+from ecom.app import EcomApp       # noqa: E402
+import tkinter.messagebox as mb    # noqa: E402
+
+mb.showinfo = lambda *a, **k: None
+
+root = tk.Tk()
+root.withdraw()
+app = EcomApp(root)
+root.update()
+
+print("%-12s %-14s %-14s" % ("文本量", "同步(旧实现)", "异步(新实现)"))
+for n in (10_000, 136_000, 1_000_000):
+    text = "AT+QGMR\r\n" * (n // 9)
+    t0 = time.time()
+    clip.set_clipboard(text)                     # 同步：等价旧实现的阻塞
+    sync_s = time.time() - t0
+
+    app.output.insert("end", "[2026-09-29_19:00:00:000]  RX  " + "A" * 60 + "\n")
+    t0 = time.time()
+    app._copy_to_clipboard(app.output, text)     # 异步：主线程只入队
+    async_s = time.time() - t0
+    print("%-12d %-14.3f %-14.3f" % (len(text), sync_s, async_s))
+
+app._poll_interval_ms = 10 ** 9
+root.destroy()

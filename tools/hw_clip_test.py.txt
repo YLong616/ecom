@@ -1,0 +1,135 @@
+# -*- coding: utf-8 -*-
+"""真机实测（COM105 @921600）：刷屏场景下「复制全部」不卡主线程 + 剪贴板内容完整。
+
+用法：python tools/hw_clip_test.py [PORT] [BAUD]
+验证点：
+  1) 持续收发（刷屏）中途调用 _copy_all：主线程阻塞时间必须 ≈ 0（旧实现会阻塞数百 ms 到数秒）
+  2) 端口静默后复制全部：外部进程（独立进程读剪贴板）读到的长度 == 输出框文本长度
+  3) 全选 + <<Copy>>（Ctrl+C 路径）同样完整
+"""
+import ctypes
+import ctypes.wintypes as wt
+import os
+import subprocess
+import sys
+import time
+import tkinter as tk
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ecom.app import EcomApp  # noqa: E402
+import tkinter.messagebox as _mb  # noqa: E402
+
+# 复制全部成功会弹模态提示框：无人操作会一直卡住，脚本里屏蔽（与测试同款处理）
+_mb.showinfo = lambda *a, **k: None
+
+PORT = sys.argv[1] if len(sys.argv) > 1 else "COM105"
+BAUD = int(sys.argv[2] if len(sys.argv) > 2 else 921600)
+CMDS = ["get_version", "get_sub_version"]
+
+_READER = (
+    "import ctypes, ctypes.wintypes as wt\n"
+    "u=ctypes.windll.user32; k=ctypes.windll.kernel32; H=ctypes.c_void_p\n"
+    "u.OpenClipboard.argtypes=[H]; u.OpenClipboard.restype=wt.BOOL\n"
+    "u.GetClipboardData.argtypes=[ctypes.c_uint]; u.GetClipboardData.restype=H\n"
+    "k.GlobalLock.argtypes=[H]; k.GlobalLock.restype=H\n"
+    "k.GlobalUnlock.argtypes=[H]\n"
+    "assert u.OpenClipboard(None)\n"
+    "h=u.GetClipboardData(13)\n"
+    "s=ctypes.wstring_at(k.GlobalLock(h)) if h else ''\n"
+    "u.CloseClipboard()\n"
+    "print(len(s))\n"
+)
+
+
+def ext_len():
+    r = subprocess.run([sys.executable, "-c", _READER], stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE, timeout=60)
+    return int(r.stdout.decode().strip()) if r.returncode == 0 else -1
+
+
+def wait_len(want, root, timeout=20.0):
+    end = time.time() + timeout
+    got = -1
+    while time.time() < end:
+        root.update()
+        got = ext_len()
+        if got == want:
+            return got
+        time.sleep(0.05)
+    return got
+
+
+def main():
+    root = tk.Tk()
+    root.withdraw()
+    app = EcomApp(root)
+    root.update()
+
+    print("可用端口:", [d for d, _ in app.core.list_ports()])
+    app.port_var.set(PORT)
+    app.send_suffix_var.set("CR-LF")
+    app._toggle_port()
+    root.update()
+    print("port %s open = %s (active=%s)" % (PORT, app.core.is_open, getattr(app, "_active_port", None)))
+    if not app.core.is_open:
+        print("FAIL: 串口未打开")
+        return 1
+
+    # ---------- 阶段1：刷屏途中复制 ----------
+    t_copy = None
+    for i in range(24):
+        app.send_text(CMDS[i % 2])
+        t_end = time.time() + 0.06
+        while time.time() < t_end:          # 泵事件：模拟真实 GUI 一边收一边渲染
+            root.update()
+            time.sleep(0.004)
+        if i == 18:
+            t0 = time.time()
+            app._copy_all(app.output)
+            t_copy = time.time() - t0
+            print("复制全部（刷屏中）主线程阻塞 %.3fs，输出框 %d 字符" %
+                  (t_copy, len(app.output.get("1.0", "end-1c"))))
+
+    # 等端口静默（RX 聚合渲染完）
+    end = time.time() + 3.0
+    while time.time() < end:
+        root.update()
+        time.sleep(0.01)
+
+    # ---------- 阶段2：静默后复制全部，长度必须一致 ----------
+    expect = len(app.output.get("1.0", "end-1c"))
+    t0 = time.time()
+    app._copy_all(app.output)
+    t2 = time.time() - t0
+    got2 = wait_len(expect, root)
+    print("静默后复制全部：阻塞 %.3fs，期望 %d 字符，外部读到 %d -> %s" %
+          (t2, expect, got2, "OK" if got2 == expect else "MISMATCH"))
+
+    # ---------- 阶段3：全选 + Ctrl+C（虚拟事件）路径 ----------
+    app.output.tag_add("sel", "1.0", "end")
+    t0 = time.time()
+    app.output.event_generate("<<Copy>>")
+    t3 = time.time() - t0
+    got3 = wait_len(expect, root)
+    print("全选+<<Copy>>：阻塞 %.3fs，外部读到 %d -> %s" %
+          (t3, got3, "OK" if got3 == expect else "MISMATCH"))
+
+    typed = app.input.get("1.0", "end-1c")
+    print("输入框内容 = %r（不应出现「已复制 N 字符」）" % typed[:60])
+    print("TX=%s RX=%s" % (app.status_tx.cget("text"), app.status_rx.cget("text")))
+
+    ok = (t_copy is not None and t_copy < 0.2 and t2 < 0.2 and t3 < 0.2
+          and got2 == expect and got3 == expect and typed.strip() == "")
+    print("RESULT:", "PASS" if ok else "FAIL")
+
+    app._poll_interval_ms = 10 ** 9
+    try:
+        app.core.close()
+    except Exception:
+        pass
+    root.destroy()
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

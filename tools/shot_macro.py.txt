@@ -1,0 +1,65 @@
+# -*- coding: utf-8 -*-
+"""抓「宏定义」窗口的位图（PrintWindow -> BMP），用于视觉走查。
+
+用法：python tools/shot_macro.py
+"""
+import os
+import sys
+import tkinter as tk
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+
+from ecom.app import EcomApp             # noqa: E402
+from ecom.config import Config           # noqa: E402
+from ecom.macro_panel import show_macros  # noqa: E402
+from win_grab import grab_window          # noqa: E402
+
+root = tk.Tk()
+app = EcomApp(root)
+# 用临时配置，别动用户真实宏表
+app.config = Config(os.path.join(HERE, "_shot_macros.json"))
+app.config.data["macros"] = [
+    {"key": "data", "value": "123456"},
+    {"key": "data1", "value": "12345*10"},
+    {"key": "data-2", "value": "12345-1"},        # 连字符也允许
+    {"key": "1pkg", "value": "AB*3"},             # 数字开头也允许
+    {"key": "数据包", "value": "中文数据*2"},        # 中文也允许
+    {"key": "payload", "value": "1234567890*150"},
+]
+root.geometry("1180x800+20+20")
+root.deiconify()
+root.update()
+
+panel = show_macros(app)
+panel.win.deiconify()
+panel.win.lift()
+panel.win.update()
+root.update()
+
+# 演示：含空格的宏名 -> 即时红字提示 + 保存被拦 + 聚焦选中出错行
+panel._add()
+_idx = len(panel.rows) - 1
+panel._vars[_idx]["key"].set("a b")
+panel.win.update()
+panel._save()
+panel.win.update()
+print("空格名被拦:", not panel._save(), "| 状态:", repr(panel.status.cget("text")))
+print("状态颜色:", repr(panel.status.cget("foreground")))
+# 故意保留这一行，让截图同时展示「含空格的行 + 红色提示」
+
+out = os.path.join(HERE, "ui_shot_macros.bmp")
+print("grab:", grab_window(int(panel.win.wm_frame(), 16), out))
+print("rows:", panel.rows)
+print("len labels:", [panel._vars[i]["len"].cget("text") for i in sorted(panel._vars)])
+# 再抓一张：模糊搜索过滤中（dta -> data / data1 / data-2）
+panel.search_var.set("dta")
+panel.win.update()
+out2 = os.path.join(HERE, "ui_shot_macros_search.bmp")
+print("grab search:", grab_window(int(panel.win.wm_frame(), 16), out2))
+print("过滤后行号:", panel._filtered_indices(), "| 状态:",
+      repr(panel.status.cget("text")))
+
+panel.win.destroy()
+root.destroy()

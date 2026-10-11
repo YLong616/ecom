@@ -1,0 +1,40 @@
+# -*- coding: utf-8 -*-
+"""反向验证：把 set_clipboard 换回「旧实现（Tk 延迟渲染）」后，
+新回归用例必须失败 —— 证明用例确实能抓住这个 bug，而不是恒真。
+
+预期输出：Ran 2 tests ... FAILED (failures=2)
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import unittest
+
+
+def legacy_tk(text, widget=None):
+    """旧实现：Tk clipboard_append（延迟渲染）。"""
+    if not text or widget is None:
+        return False
+    widget.clipboard_clear()
+    widget.clipboard_append(text)
+    widget.update_idletasks()
+    widget.update()
+    return True
+
+
+import ecom.app as app_mod          # noqa: E402
+from ecom import clipboard as clip  # noqa: E402
+
+clip.set_clipboard = legacy_tk
+app_mod.set_clipboard = legacy_tk   # app.py 里是 from ... import set_clipboard
+
+import tests.test_clipboard as tc   # noqa: E402
+
+suite = unittest.TestSuite()
+suite.addTest(tc.TestCopyAllRegression("test_copy_selection_via_virtual_event"))
+suite.addTest(tc.TestCopyAllRegression("test_copy_all_external_read_after_busy"))
+res = unittest.TextTestRunner(verbosity=2).run(suite)
+print("failures=%d errors=%d  -> %s" %
+      (len(res.failures), len(res.errors),
+       "OK: 用例能抓住旧实现的问题" if res.failures else "BAD: 用例恒真，抓不住 bug"))
+sys.exit(0 if res.failures else 1)

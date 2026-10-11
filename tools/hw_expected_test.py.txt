@@ -1,0 +1,106 @@
+# -*- coding: utf-8 -*-
+"""真机验收：压力模式「编辑预期结果 → 测试」按钮（COM105 @921600）。
+
+流程：
+  1) 打开串口；第 1 行 AT 命令设为 get_version，预期故意填错 -> 点测试 -> 应为红色「匹配失败」，
+     同时把实际返回打印出来；
+  2) 用实际返回里的一行作为预期 -> 重开对话框再测 -> 应为绿色「匹配成功」。
+用法：python tools/hw_expected_test.py [PORT] [BAUD]
+"""
+import os
+import sys
+import time
+import tkinter as tk
+import tkinter.messagebox as mb
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ecom.app import EcomApp  # noqa: E402
+
+mb.showinfo = lambda *a, **k: None
+PORT = sys.argv[1] if len(sys.argv) > 1 else "COM105"
+BAUD = int(sys.argv[2] if len(sys.argv) > 2 else 921600)
+CMD = "get_version"
+
+
+def pump(root, seconds):
+    end = time.time() + seconds
+    while time.time() < end:
+        root.update()
+        time.sleep(0.02)
+
+
+def run_test(root, panel, dlg, timeout=8.0):
+    """点「测试」并等出结论，返回 (结论文本, 结果框全文, tag)"""
+    dlg._test_btn.invoke()
+    end = time.time() + timeout
+    while time.time() < end:
+        root.update()
+        res = dlg._test_res
+        if res.tag_ranges("ok") or res.tag_ranges("fail"):
+            tag = "ok" if res.tag_ranges("ok") else "fail"
+            body = res.get("1.0", "end-1c")
+            lines = [l for l in body.splitlines() if l.strip()]
+            return lines[-1].strip(), body, tag
+        time.sleep(0.02)
+    return None, dlg._test_res.get("1.0", "end-1c"), None
+
+
+root = tk.Tk()
+root.withdraw()
+app = EcomApp(root)
+root.update()
+panel = app._get_stress_view()
+root.update()
+
+panel.core.open(PORT, baudrate=BAUD)
+panel._active_port = PORT
+pump(root, 0.5)
+print("port open:", panel.core.is_open, PORT, BAUD)
+if not panel.core.is_open:
+    print("FAIL: 串口未打开")
+    sys.exit(1)
+
+# 行 0：命令 = 真机指令
+panel._rows[0].txt = CMD
+for v in panel._row_vars:
+    if v.get("gidx") == 0:
+        v["txt"].set(CMD)
+
+# ---- 阶段1：预期故意写错 -> 红 ----
+panel._rows[0].expected = "THIS_WILL_NOT_MATCH"
+panel._edit_expected(0)
+root.update()
+dlg = [w for w in panel.winfo_children() if isinstance(w, tk.Toplevel)][0]
+print("测试命令默认值 =", repr(dlg._test_at_var.get()))
+verdict1, body1, tag1 = run_test(root, panel, dlg)
+print("阶段1 结论: %r  tag=%s" % (verdict1, tag1))
+print("阶段1 全文:\n%s" % body1)
+dlg.destroy()
+pump(root, 0.3)
+
+# 从实际返回里取一行作为预期
+cand = [l.strip() for l in body1.splitlines() if l.strip() and not l.startswith("返回结果")]
+cand = [l for l in cand if len(l) >= 4 and l not in (CMD, CMD + "\r")]   # 排除命令回显
+if not cand:
+    print("FAIL: 没拿到可用返回（真机无响应？）")
+    sys.exit(1)
+expect = cand[0]
+print("阶段2 预期取自实际返回: %r" % expect)
+
+panel._rows[0].expected = expect
+panel._edit_expected(0)
+root.update()
+dlg = [w for w in panel.winfo_children() if isinstance(w, tk.Toplevel)][0]
+verdict2, body2, tag2 = run_test(root, panel, dlg)
+print("阶段2 结论: %r  tag=%s" % (verdict2, tag2))
+dlg.destroy()
+
+ok = (tag1 == "fail" and tag2 == "ok")
+print("RESULT:", "PASS" if ok else "FAIL")
+panel._poll_interval_ms = 10 ** 9
+try:
+    panel.core.close()
+except Exception:
+    pass
+root.destroy()
+sys.exit(0 if ok else 1)

@@ -1,0 +1,36 @@
+# -*- coding: utf-8 -*-
+"""剪贴板自测：纯 Tk Text 全选复制到剪贴板，验证本机 Tk + 系统剪贴板是否正常。
+运行：python _clipboard_test.py
+结果分两种：
+  A) 弹窗提示已复制，且你能 Ctrl+V 粘贴到记事本 -> Tk/系统剪贴板正常，问题在 eCOM。
+  B) 弹窗提示已复制，但无法粘贴到记事本 -> 该环境 Tk/系统剪贴板本身有问题（需换底层方案）。
+运行后会自动全选、复制，并把文本放入剪贴板；请打开记事本 Ctrl+V 验证。
+"""
+import tkinter as tk
+from tkinter import messagebox
+
+root = tk.Tk()
+root.title("剪贴板自测")
+root.geometry("420x260")
+t = tk.Text(root, wrap="word")
+t.pack(fill="both", expand=True, padx=8, pady=8)
+line = "[2026-09-08 14:38:02]  TX  AT\n"
+t.insert("1.0", line * 60)            # 塞入约 60 行，模拟 Log
+t.configure(state="disabled")          # 只读，但允许选中/复制（与 eCOM 输出框一致）
+root.update()
+
+try:
+    t.tag_add("sel", "1.0", "end")
+    txt = t.get("sel.first", "sel.last")
+    root.clipboard_clear()
+    root.clipboard_append(txt)
+    root.update_idletasks()
+    root.update()
+    messagebox.showinfo(
+        "剪贴板自测",
+        "已复制 %d 字符到剪贴板。\n\n请打开【记事本】Ctrl+V 粘贴，看是否出现这些行。\n（也可按 Win+V 看剪贴板历史）" % len(txt),
+    )
+except Exception as e:
+    messagebox.showerror("剪贴板自测", "复制失败: %r" % (e,))
+
+root.mainloop()

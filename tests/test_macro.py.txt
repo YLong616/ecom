@@ -1,0 +1,404 @@
+# -*- coding: utf-8 -*-
+"""宏定义（参数自定义）测试：值渲染 / 展开 / 保存 / 三处发送链路 / 宏定义窗口。
+
+运行（项目根目录 projects/eCOM 下）：
+    python -m unittest tests.test_macro -v
+"""
+
+import os
+import sys
+import tempfile
+import tkinter as tk
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ecom import macro  # noqa: E402
+from ecom.config import Config  # noqa: E402
+
+try:
+    from ecom.app import EcomApp
+except Exception as exc:  # 无 tkinter
+    EcomApp = None
+    _import_error = exc
+
+
+class TestMacroValue(unittest.TestCase):
+    """值的语义：默认「字面量 + *N 重复」，= 开头才是受限表达式。"""
+
+    def test_user_table_examples(self):
+        """用户给的表格：123456 -> 6 byte；12345*10 -> 50 byte；12345-1 -> 7 byte。"""
+        cases = {"123456": (6, "123456"),
+                 "12345*10": (50, "12345" * 10),
+                 "12345-1": (7, "12345-1")}
+        for expr, (n, text) in cases.items():
+            val, err = macro.render_value(expr)
+            self.assertIsNone(err, "%s 不该报错：%s" % (expr, err))
+            self.assertEqual(macro.byte_len(val), n, "%s 长度应为 %d" % (expr, n))
+            self.assertEqual(val, text)
+            print("[macro] %-12s -> %d byte" % (expr, macro.byte_len(val)))
+
+    def test_tcp_payload_case(self):
+        """真实场景：send_data = 1234567890*150 -> 1500 字节。"""
+        val, err = macro.render_value("1234567890*150")
+        self.assertIsNone(err)
+        self.assertEqual(macro.byte_len(val), 1500)
+
+    def test_star_without_integer_is_literal(self):
+        val, err = macro.render_value("A*BCD")
+        self.assertIsNone(err)
+        self.assertEqual(val, "A*BCD")
+
+    def test_expr_mode(self):
+        self.assertEqual(macro.render_value("='AB'+'CD'")[0], "ABCD")
+        self.assertEqual(macro.render_value("='12345'*10")[0], "12345" * 10)
+        self.assertEqual(macro.render_value("=str(1500)+',x'")[0], "1500,x")
+        self.assertEqual(macro.render_value("=len('abc')")[0], "3")
+        self.assertEqual(macro.render_value('=join("-", ["a", "b"])')[0], "a-b")
+
+    def test_expr_security(self):
+        """不允许 import / 内置 open / 属性访问 / 下标 / 变量名。"""
+        for expr in ("=__import__('os').system('dir')",
+                     "=open('x')",
+                     "=().__class__",
+                     "='abc'[0]",
+                     "=evil_name",
+                     "=[x for x in range(3)]"):
+            val, err = macro.render_value(expr)
+            self.assertIsNone(val, "应当被拒绝: %s" % expr)
+            self.assertTrue(err)
+            print("[macro] 拒绝 %-28s -> %s" % (expr, err))
+
+    def test_size_guards(self):
+        for expr in ("='x'*10**9", "=10**100000", "x*99999999"):
+            val, err = macro.render_value(expr)
+            self.assertIsNone(val, "应当因超限被拒绝: %s" % expr)
+            self.assertTrue(err)
+            print("[macro] 超限 %-16s -> %s" % (expr, err))
+
+    def test_validate_key(self):
+        self.assertIsNone(macro.validate_key("send_data"))
+        self.assertIsNone(macro.validate_key("1abc"))      # 数字开头：允许
+        self.assertIsNone(macro.validate_key("a-b"))       # 特殊字符：允许
+        self.assertEqual(macro.validate_key(""), "empty")
+        self.assertEqual(macro.validate_key("  "), "empty")
+        self.assertEqual(macro.validate_key("a}b"), "bad")   # 含 } 无法引用
+        self.assertEqual(macro.validate_key("a\nb"), "bad")
+
+
+class TestMacroExpand(unittest.TestCase):
+    def setUp(self):
+        self.macros = {"data": "12345*10", "n": "1500", "bad": "='x'*10**9"}
+
+    def test_expand_basic(self):
+        text, errs = macro.expand('AT+TCPSEND=${n},"${data}"', self.macros)
+        self.assertEqual(errs, [])
+        self.assertEqual(text, 'AT+TCPSEND=1500,"%s"' % ("12345" * 10))
+        print("[macro] 展开: AT+TCPSEND=${n},\"${data}\" -> %d 字节" % macro.byte_len(text))
+
+    def test_braces_literal_and_dollar_escape(self):
+        """花括号是普通字符（JSON 载荷无需转义）；$$ 写出字面 $；非法宏名原样保留。"""
+        text, errs = macro.expand('AT+X={"a":1}', self.macros)
+        self.assertEqual(errs, [])
+        self.assertEqual(text, 'AT+X={"a":1}')
+        t2, e2 = macro.expand('AT+X=$${n}', self.macros)   # $$ 不是宏引用
+        self.assertEqual(e2, [])
+        self.assertEqual(t2, 'AT+X=${n}')
+        t3, e3 = macro.expand('AT+X=${}', self.macros)      # 空的 ${} 不是引用 -> 原样
+        self.assertEqual(e3, [])
+        self.assertEqual(t3, 'AT+X=${}')
+        t4, e4 = macro.expand('AT+X=${1bad}', self.macros)  # 数字开头也算合法名字
+        self.assertEqual([k for k, _ in e4], ['1bad'])      # 只是「未定义」
+
+    def test_unknown_macro_reports_error_and_keeps_token(self):
+        text, errs = macro.expand("AT+X=${nope}", self.macros)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0][0], "nope")
+        self.assertIn("${nope}", text)          # 原样保留，便于定位
+
+    def test_bad_value_reports_error(self):
+        _t, errs = macro.expand("${bad}", self.macros)
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(errs[0][0], "bad")
+
+    def test_parse_macros_skips_invalid(self):
+        m = macro.parse_macros([{"key": "a", "value": "1"},
+                                {"key": "1bad", "value": "2"},   # 数字开头：合法
+                                {"key": "a}b", "value": "3"},    # 含 }：无法引用
+                                {"key": "", "value": "4"},
+                                {"key": "a", "value": "5"}])
+        self.assertEqual(m, {"a": "1", "1bad": "2"})
+
+
+class _FakeCore:
+    """替身串口：记录 write，drain 空。"""
+
+    def __init__(self):
+        self.written = []
+
+    @property
+    def is_open(self):
+        return True
+
+    def write(self, data):
+        self.written.append(bytes(data))
+        return len(data)
+
+    def drain(self):
+        return []
+
+    def list_ports(self):
+        return []
+
+    def close(self):
+        pass
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestMacroSendPaths(unittest.TestCase):
+    """保存/读取 + 三处发送前展开（AT 输入、AT list 行、压力行）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ecom_macro_")
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.app.config = Config(os.path.join(self.tmp, "config.json"))   # 不碰用户真实配置
+        self.root.update()
+        self.app.core = _FakeCore()
+
+    def tearDown(self):
+        self.app._poll_interval_ms = 10 ** 9
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def test_save_and_load_roundtrip(self):
+        self.app.save_macro_items([{"key": "data", "value": "12345*10"}])
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "config.json")))
+        self.assertEqual(self.app.macro_items(), [{"key": "data", "value": "12345*10"}])
+        self.assertEqual(self.app.macro_map(), {"data": "12345*10"})
+
+    def test_send_text_expands(self):
+        self.app.save_macro_items([{"key": "data", "value": "12345*10"}])
+        self.app.send_type_var.set("ASCII")
+        self.app.send_suffix_var.set("CR-LF")
+        self.app.send_text('AT+TCPSEND=50,"${data}"')
+        self.assertEqual(len(self.app.core.written), 1)
+        sent = self.app.core.written[0]
+        self.assertIn(("12345" * 10).encode(), sent)
+        print("[macro] AT 输入发送 %d 字节" % len(sent))
+
+    def test_send_text_blocked_on_unknown_macro(self):
+        self.app.send_text("AT+X=${nope}")
+        self.assertEqual(self.app.core.written, [])
+        typed = self.app.input.get("1.0", "end-1c")
+        self.assertIn("nope", typed)
+        print("[macro] 未定义宏已阻止发送，提示：%r" % typed.strip()[:60])
+
+    def test_at_list_row_expands(self):
+        # 显式设定 Enter（原来隐含依赖项目 configs/ 里既有配置，换台机器/打包后就挂）
+        self.app.save_macro_items([{"key": "data", "value": "12345-1"}])
+        panel = self.app.at_panel
+        v = panel._row_vars[0]
+        v["txt"].set('AT+X="${data}"')
+        v["ent"].set(True)          # 追加 CR-LF
+        raw = panel._encode_row(v)
+        self.assertEqual(raw, b'AT+X="12345-1"\r\n')
+        v["ent"].set(False)         # 不追加后缀
+        self.assertEqual(panel._encode_row(v), b'AT+X="12345-1"')
+
+    def test_at_list_row_blocked_on_bad_value(self):
+        self.app.save_macro_items([{"key": "bad", "value": "='x'*10**9"}])
+        panel = self.app.at_panel
+        v = panel._row_vars[0]
+        v["txt"].set('AT+X="${bad}"')
+        self.assertEqual(panel._encode_row(v), b"")
+
+    def test_stress_row_expands(self):
+        self.app.save_macro_items([{"key": "data", "value": "1234567890*150"}])
+        sp = self.app._get_stress_view()
+        from ecom.stress_model import StressRow
+        row = StressRow(txt='AT+TCPSEND=1500,"${data}"')
+        raw = sp._row_bytes(row)
+        self.assertEqual(len(raw), len('AT+TCPSEND=1500,""') + 1500 + 2)   # +2 = CR-LF
+        print("[macro] 压力行展开后 %d 字节" % len(raw))
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestMacroPanelUi(unittest.TestCase):
+    """宏定义窗口：新增 / 行内编辑 / 长度列 / 保存 / 删除 / 分页。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ecom_macro_ui_")
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.app.config = Config(os.path.join(self.tmp, "config.json"))
+        self.root.update()
+        from ecom.macro_panel import MacroPanel
+        self.panel = MacroPanel(self.app)
+        self.root.update()
+
+    def tearDown(self):
+        try:
+            self.panel.win.destroy()
+        except tk.TclError:
+            pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def _add(self, key, value):
+        self.panel._add()
+        idx = len(self.panel.rows) - 1
+        self.panel._vars[idx]["key"].set(key)
+        self.panel._vars[idx]["value"].set(value)
+        return idx
+
+    def test_add_length_column_and_save(self):
+        i = self._add("data", "12345*10")
+        self.assertEqual(self.panel._len_text(i)[0], "50 byte")
+        self.assertEqual(self.panel._vars[i]["len"].cget("text"), "50 byte")
+        i2 = self._add("data2", "12345-1")
+        self.assertEqual(self.panel._vars[i2]["len"].cget("text"), "7 byte")
+        self.assertTrue(self.panel._save())
+        self.assertEqual(self.app.macro_items(),
+                         [{"key": "data", "value": "12345*10"},
+                          {"key": "data2", "value": "12345-1"}])
+        print("[macro] 保存后 macro_items=%s" % self.app.macro_items())
+
+    def test_bad_value_marks_length_and_blocks_save(self):
+        i = self._add("bad", "='x'*10**9")
+        self.assertFalse(self.panel._len_text(i)[1])
+        self.assertFalse(self.panel._save())
+        self.assertEqual(self.app.macro_items(), [])
+        self.assertIn("bad", self.panel.status.cget("text"))
+
+    def test_duplicate_key_blocks_save(self):
+        self._add("dup", "1")
+        self._add("dup", "2")
+        self.assertFalse(self.panel._save())
+
+    def test_row_delete_and_delete_checked(self):
+        self._add("a", "1")
+        self._add("b", "2")
+        self._add("c", "3")
+        self.panel._del(1)
+        self.assertEqual([r["key"] for r in self.panel.rows], ["a", "c"])
+        self.panel._checked.add(0)
+        self.panel._del_checked()
+        self.assertEqual([r["key"] for r in self.panel.rows], ["c"])
+
+    def test_paging(self):
+        for i in range(12):
+            self._add("k%d" % i, "1")
+        self.assertEqual(self.panel._pages(), 2)
+        self.assertEqual(len(self.panel._vars), 2)       # 新增后停在最后一页
+        self.panel._goto(1)
+        self.assertEqual(len(self.panel._vars), 10)      # 第一页 10 行
+        self.panel._goto(2)
+        self.assertEqual(len(self.panel._vars), 2)       # 第二页 2 行
+        self.assertIn("2/2", self.panel.page_lbl.cget("text"))
+        print("[macro] 分页: %s" % self.panel.page_lbl.cget("text"))
+
+    def test_check_all_selects_page(self):
+        self._add("a", "1")
+        self._add("b", "2")
+        self.panel.all_var.set(True)
+        self.panel._toggle_all()
+        self.assertEqual(self.panel._checked, {0, 1})
+        self.panel.all_var.set(False)
+        self.panel._toggle_all()
+        self.assertEqual(self.panel._checked, set())
+
+
+    def test_key_allows_digits_and_special_chars(self):
+        """宏名不限字符：数字开头、连字符、中文、点号都行；只有含 } 或换行的不能用。"""
+        for good in ("a", "1data", "data-1", "数据", "a.b", "send_data2", "a-b.c"):
+            self.assertIsNone(macro.validate_key(good), good)
+        for spaced in ("a b", "a\tb", "a\u3000b"):        # 空格/制表符/全角空格
+            self.assertEqual(macro.validate_key(spaced), "space", spaced)
+        for bad in ("a}b", "a\nb", "  "):
+            self.assertIsNotNone(macro.validate_key(bad), bad)
+        # 这类名字也要能被 ${...} 引用（取到 } 为止）
+        text, errs = macro.expand("AT+X=\"${data-1}\"", {"data-1": "12345*2"})
+        self.assertEqual(errs, [])
+        self.assertEqual(text, "AT+X=\"1234512345\"")
+        t2, e2 = macro.expand("AT+X=${ 数据 }", {"数据": "OK"})
+        self.assertEqual(e2, [])
+        self.assertEqual(t2, "AT+X=OK")
+        # 名字首尾可带空白（会 strip）；但宏名本身禁止含空格 -> 带空格的键不会被加载
+        self.assertNotIn("a b", macro.parse_macros([{"key": "a b", "value": "1"}]))
+        print("[macro] 特殊宏名展开: %s" % text)
+
+    def test_space_in_key_blocks_save_and_hints_live(self):
+        """宏名含空格：保存被拦下（专门提示），且输入时就红字提示。"""
+        i = self._add("ok", "1")
+        self.panel._vars[i]["key"].set("a b")
+        self.root.update()
+        self.assertIn(self.panel._t("macro_err_key_space", name="a b"),
+                      self.panel.status.cget("text"))
+        self.assertEqual(str(self.panel.status.cget("foreground")),
+                         self.panel.P["danger"])
+        self.assertFalse(self.panel._save())
+        self.assertEqual(self.app.macro_items(), [])
+
+    def test_case_insensitive_duplicate_blocks_save(self):
+        """Send_Data 与 send_data 只是大小写不同 -> 拦下，避免混淆。"""
+        self._add("data", "1")
+        self._add("Data", "2")
+        self.assertFalse(self.panel._save())
+        self.assertIn("Data", self.panel.status.cget("text"))
+        self.assertEqual(str(self.panel.status.cget("foreground")), self.panel.P["danger"])
+
+    def test_status_colors_and_focus_on_failure(self):
+        """状态着色：未保存=主色、保存成功=绿；保存失败聚焦并选中出错行。"""
+        self._add("ok_key", "1")
+        self.assertEqual(str(self.panel.status.cget("foreground")), self.panel.P["primary"])
+        self.assertTrue(self.panel._save())
+        self.assertEqual(str(self.panel.status.cget("foreground")), self.panel.P["success"])
+        self._add("bad}name", "2")         # 含 } 的宏名无法被引用 -> 非法
+        self.assertFalse(self.panel._save())
+        self.assertEqual(str(self.panel.status.cget("foreground")), self.panel.P["danger"])
+        self.assertTrue(self.panel._entries[1].selection_present(),
+                        "保存失败应当选中出错那一行")
+    def test_search_fuzzy_and_by_value(self):
+        """搜索：宏名**子序列**模糊匹配，或宏值包含；只影响显示。"""
+        from ecom.macro_panel import _fuzzy_match
+        self.assertTrue(_fuzzy_match("dta", "data"))
+        self.assertFalse(_fuzzy_match("xyz", "data"))
+        self.assertTrue(_fuzzy_match("", "data"))
+        self._add("data", "123456")
+        self._add("data1", "12345*10")
+        self._add("xyz", "789")
+        self.assertEqual(self.panel._filtered_indices(), [0, 1, 2])
+        self.panel.search_var.set("dta")            # 模糊（子序列）
+        self.assertEqual(self.panel._filtered_indices(), [0, 1])
+        self.assertIn(self.panel._t("macro_search_count", n=2, total=3),
+                      self.panel.status.cget("text"))
+        self.panel.search_var.set("789")            # 按宏值命中
+        self.assertEqual(self.panel._filtered_indices(), [2])
+        self.panel.search_var.set("zzz")            # 无匹配
+        self.assertEqual(self.panel._filtered_indices(), [])
+        self.assertEqual(len(self.panel._vars), 0)  # 渲染为空
+        self.panel.search_var.set("")
+        self.assertEqual(self.panel._filtered_indices(), [0, 1, 2])
+
+    def test_search_keeps_save_scope_and_add_clears(self):
+        """过滤只影响显示：保存仍保存**全部**；点「新增」自动清空搜索。"""
+        self._add("data", "1")
+        self._add("other", "2")
+        self.panel.search_var.set("data")
+        self.assertEqual(self.panel._filtered_indices(), [0])
+        self.assertTrue(self.panel._save())
+        self.assertEqual(len(self.app.macro_items()), 2,
+                         "过滤不该影响保存范围")
+        self.panel.search_var.set("data")
+        self.panel._add()
+        self.assertEqual(self.panel.search_var.get(), "", "新增应清空搜索")
+        self.assertEqual(len(self.panel.rows), 3)
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

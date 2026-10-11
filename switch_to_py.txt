@@ -1,0 +1,735 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+import shutil
+import time
+import datetime
+from pathlib import Path
+import argparse
+
+class FileManager:
+    def __init__(self, folder_path):
+        self.folder_path = Path(folder_path).resolve()
+        if not self.folder_path.exists():
+            raise ValueError(f"文件夹路径不存在: {folder_path}")
+        if not self.folder_path.is_dir():
+            raise ValueError(f"提供的路径不是文件夹: {folder_path}")
+        
+        self.copy_folder_path = None
+        self.py_files = []
+        self.created_txt_files = []
+        self.converted_files = []
+        self.cleaned_cache_dirs = []
+        
+    def clone_folder(self):
+        """克隆文件夹并命名为 原名称+copy+时间戳"""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        folder_name = self.folder_path.name
+        new_folder_name = f"{folder_name}_copy_{timestamp}"
+        self.copy_folder_path = self.folder_path.parent / new_folder_name
+        
+        try:
+            # 克隆整个文件夹
+            shutil.copytree(self.folder_path, self.copy_folder_path)
+            print(f"✓ 文件夹克隆成功: {self.copy_folder_path}")
+            
+            # 在新克隆的文件夹中查找所有.py文件并创建对应的.py.txt文件
+            self._create_py_txt_files_in_clone()
+            
+            return True
+        except Exception as e:
+            print(f"✗ 克隆文件夹失败: {e}")
+            return False
+    
+    def _create_py_txt_files_in_clone(self):
+        """在克隆的文件夹中创建所有.py文件对应的.py.txt文件"""
+        if not self.copy_folder_path:
+            print("✗ 请先克隆文件夹")
+            return
+        
+        # 遍历克隆文件夹中的所有.py文件
+        py_files = list(self.copy_folder_path.rglob("*.py"))
+        
+        if not py_files:
+            print("ℹ 未找到任何.py文件")
+            return
+        
+        print(f"\n正在处理 {len(py_files)} 个.py文件...")
+        
+        for py_file in py_files:
+            try:
+                # 创建对应的.py.txt文件路径 (例如: main.py -> main.py.txt)
+                py_txt_file = py_file.with_suffix('.py.txt')
+                
+                # 读取.py文件内容
+                with open(py_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 写入.py.txt文件
+                with open(py_txt_file, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                self.created_txt_files.append(py_txt_file)
+                print(f"  ✓ 创建: {py_txt_file.relative_to(self.copy_folder_path)}")
+                
+            except Exception as e:
+                print(f"  ✗ 处理 {py_file.name} 失败: {e}")
+        
+        print(f"\n✓ 成功创建 {len(self.created_txt_files)} 个.py.txt文件")
+    
+    def delete_cloned_py_files(self):
+        """删除克隆文件夹中的所有.py文件"""
+        if not self.copy_folder_path:
+            print("✗ 请先克隆文件夹")
+            return False
+        
+        if not self.copy_folder_path.exists():
+            print(f"✗ 克隆文件夹不存在: {self.copy_folder_path}")
+            return False
+        
+        # 查找克隆文件夹中的所有.py文件
+        py_files = list(self.copy_folder_path.rglob("*.py"))
+        
+        if not py_files:
+            print("ℹ 克隆文件夹中未找到任何.py文件需要删除")
+            return True
+        
+        print(f"\n在克隆文件夹中找到 {len(py_files)} 个.py文件准备删除:")
+        for py_file in py_files:
+            print(f"  - {py_file.relative_to(self.copy_folder_path)}")
+        
+        # 确认删除
+        confirm = input(f"\n确定要删除克隆文件夹中的这 {len(py_files)} 个.py文件吗？(y/N): ").strip().lower()
+        if confirm != 'y' and confirm != 'yes':
+            print("操作已取消")
+            return False
+        
+        deleted_count = 0
+        failed_files = []
+        
+        for py_file in py_files:
+            try:
+                # 检查是否有对应的.py.txt文件存在
+                py_txt_file = py_file.with_suffix('.py.txt')
+                if py_txt_file.exists():
+                    print(f"  ℹ 发现对应的 {py_txt_file.name} 文件，将保留")
+                
+                os.remove(py_file)
+                deleted_count += 1
+                print(f"  ✓ 删除: {py_file.relative_to(self.copy_folder_path)}")
+            except Exception as e:
+                failed_files.append((py_file, str(e)))
+                print(f"  ✗ 删除 {py_file.name} 失败: {e}")
+        
+        print(f"\n✓ 成功删除 {deleted_count} 个.py文件")
+        if failed_files:
+            print(f"✗ {len(failed_files)} 个文件删除失败")
+        
+        return True
+    
+    def convert_py_txt_to_py(self, target_path=None):
+        """
+        将指定文件夹中的所有.py.txt文件转换为.py文件
+        如果不指定target_path，则使用克隆文件夹路径
+        """
+        if target_path is None:
+            target_path = self.copy_folder_path
+        
+        if not target_path:
+            print("✗ 请指定要转换的文件夹路径")
+            return False
+        
+        target_path = Path(target_path).resolve()
+        if not target_path.exists():
+            print(f"✗ 文件夹不存在: {target_path}")
+            return False
+        
+        if not target_path.is_dir():
+            print(f"✗ 路径不是文件夹: {target_path}")
+            return False
+        
+        # 查找文件夹中的所有.py.txt文件
+        py_txt_files = list(target_path.rglob("*.py.txt"))
+        
+        if not py_txt_files:
+            print("ℹ 未找到任何.py.txt文件")
+            return True
+        
+        print(f"\n找到 {len(py_txt_files)} 个.py.txt文件准备转换:")
+        for py_txt_file in py_txt_files:
+            print(f"  - {py_txt_file.relative_to(target_path)}")
+        
+        # 确认转换
+        confirm = input(f"\n确定要将这 {len(py_txt_files)} 个.py.txt文件转换为.py文件吗？(y/N): ").strip().lower()
+        if confirm != 'y' and confirm != 'yes':
+            print("操作已取消")
+            return False
+        
+        converted_count = 0
+        failed_files = []
+        
+        for py_txt_file in py_txt_files:
+            try:
+                # 读取.py.txt文件内容
+                with open(py_txt_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # 创建对应的.py文件路径 (例如: main.py.txt -> main.py)
+                py_file = py_txt_file.with_suffix('')  # 去掉最后一个后缀
+                
+                # 如果目标.py文件已存在，询问是否覆盖
+                if py_file.exists():
+                    overwrite = input(f"  ⚠ {py_file.name} 已存在，是否覆盖？(y/N): ").strip().lower()
+                    if overwrite != 'y' and overwrite != 'yes':
+                        print(f"  ℹ 跳过: {py_txt_file.name}")
+                        continue
+                
+                # 写入.py文件
+                with open(py_file, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                self.converted_files.append(py_file)
+                converted_count += 1
+                print(f"  ✓ 转换: {py_txt_file.relative_to(target_path)} -> {py_file.name}")
+                
+            except Exception as e:
+                failed_files.append((py_txt_file, str(e)))
+                print(f"  ✗ 转换 {py_txt_file.name} 失败: {e}")
+        
+        print(f"\n✓ 成功转换 {converted_count} 个.py.txt文件为.py文件")
+        if failed_files:
+            print(f"✗ {len(failed_files)} 个文件转换失败")
+        
+        return True
+    
+    def clean_pycache(self, target_path=None):
+        """清除指定路径下的所有__pycache__文件夹"""
+        if target_path is None:
+            target_path = self.copy_folder_path
+        
+        if not target_path:
+            print("✗ 请指定要清理的文件夹路径")
+            return False
+        
+        if not target_path.exists():
+            print(f"✗ 路径不存在: {target_path}")
+            return False
+        
+        # 查找所有__pycache__文件夹
+        cache_dirs = list(target_path.rglob("__pycache__"))
+        
+        if not cache_dirs:
+            print("ℹ 未找到任何__pycache__文件夹")
+            return True
+        
+        print(f"\n找到 {len(cache_dirs)} 个__pycache__文件夹准备删除:")
+        for cache_dir in cache_dirs:
+            # 计算文件夹大小
+            size = self._get_folder_size(cache_dir)
+            size_str = self._format_size(size)
+            print(f"  - {cache_dir.relative_to(target_path)} ({size_str})")
+        
+        # 确认删除
+        confirm = input(f"\n确定要删除这 {len(cache_dirs)} 个__pycache__文件夹吗？(y/N): ").strip().lower()
+        if confirm != 'y' and confirm != 'yes':
+            print("操作已取消")
+            return False
+        
+        cleaned_count = 0
+        failed_dirs = []
+        total_size = 0
+        
+        for cache_dir in cache_dirs:
+            try:
+                size = self._get_folder_size(cache_dir)
+                shutil.rmtree(cache_dir)
+                cleaned_count += 1
+                total_size += size
+                self.cleaned_cache_dirs.append(cache_dir)
+                size_str = self._format_size(size)
+                print(f"  ✓ 删除: {cache_dir.relative_to(target_path)} ({size_str})")
+            except Exception as e:
+                failed_dirs.append((cache_dir, str(e)))
+                print(f"  ✗ 删除 {cache_dir.name} 失败: {e}")
+        
+        total_size_str = self._format_size(total_size)
+        print(f"\n✓ 成功删除 {cleaned_count} 个__pycache__文件夹，释放 {total_size_str} 空间")
+        if failed_dirs:
+            print(f"✗ {len(failed_dirs)} 个文件夹删除失败")
+        
+        return True
+    
+    def clean_all_pycache(self):
+        """清除源文件夹和克隆文件夹中的所有__pycache__"""
+        cleaned_count = 0
+        total_size = 0
+        
+        print("\n🔍 正在查找所有__pycache__文件夹...")
+        
+        # 清除源文件夹
+        if self.folder_path and self.folder_path.exists():
+            print(f"\n📁 处理源文件夹: {self.folder_path}")
+            result1 = self.clean_pycache(self.folder_path)
+            if result1:
+                pass
+        
+        # 清除克隆文件夹
+        if self.copy_folder_path and self.copy_folder_path.exists():
+            print(f"\n📁 处理克隆文件夹: {self.copy_folder_path}")
+            result2 = self.clean_pycache(self.copy_folder_path)
+            if result2:
+                pass
+        
+        return True
+    
+    def _get_folder_size(self, folder_path):
+        """计算文件夹大小"""
+        total_size = 0
+        try:
+            for item in folder_path.rglob('*'):
+                if item.is_file():
+                    total_size += item.stat().st_size
+        except:
+            pass
+        return total_size
+    
+    def _format_size(self, size_bytes):
+        """格式化文件大小"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} TB"
+    
+    def list_files(self, file_type='py', target_path=None):
+        """列出指定类型的文件"""
+        if target_path is None:
+            target_path = self.copy_folder_path
+        
+        if not target_path:
+            print("✗ 请指定要查看的文件夹路径")
+            return []
+        
+        if not target_path.exists():
+            print(f"✗ 文件夹不存在: {target_path}")
+            return []
+        
+        if file_type == 'py':
+            files = list(target_path.rglob("*.py"))
+            file_type_name = ".py"
+        elif file_type == 'py_txt':
+            files = list(target_path.rglob("*.py.txt"))
+            file_type_name = ".py.txt"
+        elif file_type == 'pycache':
+            files = list(target_path.rglob("__pycache__"))
+            file_type_name = "__pycache__"
+        else:
+            return []
+        
+        if files:
+            print(f"\n找到 {len(files)} 个{file_type_name}文件/文件夹:")
+            for file in files:
+                if file_type == 'pycache':
+                    size = self._get_folder_size(file)
+                    size_str = self._format_size(size)
+                    print(f"  - {file.relative_to(target_path)} ({size_str})")
+                else:
+                    print(f"  - {file.relative_to(target_path)}")
+        else:
+            print(f"ℹ 未找到任何{file_type_name}文件/文件夹")
+        return files
+
+def display_menu():
+    """显示菜单"""
+    print("\n" + "=" * 60)
+    print("🐍 Python文件管理工具")
+    print("=" * 60)
+    print("  (1) 克隆文件并创建.py.txt")
+    print("  (2) 删除克隆文件夹中的.py文件")
+    print("  (3) 转换.py.txt为.py文件 (支持独立使用)")
+    print("  (4) 查看文件夹中的.py文件")
+    print("  (5) 查看文件夹中的.py.txt文件")
+    print("  (6) 执行完整流程 (克隆+创建.py.txt+删除.py文件)")
+    print("  (7) 执行完整流程并转换 (克隆+创建.py.txt+删除.py文件+转换.py.txt为.py)")
+    print("  (8) 清除__pycache__缓存文件夹")
+    print("  (9) 查看__pycache__文件夹")
+    print("  (q) 退出")
+    print("=" * 60)
+
+def show_help():
+    """显示帮助信息"""
+    help_text = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         Python文件管理工具 - 使用帮助                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+【功能说明】
+  这个工具用于管理Python项目文件，支持克隆文件夹、转换文件类型、
+  清除__pycache__缓存等操作。
+
+【使用方式】
+
+  1. 交互式运行 (推荐)
+     python script.py
+     - 程序会提示输入文件夹路径
+     - 然后显示交互式菜单供选择操作
+
+  2. 命令行模式 (直接执行)
+     python script.py /path/to/folder -c    # 直接克隆
+     python script.py /path/to/folder -d    # 删除克隆文件夹中的.py文件
+     python script.py /path/to/folder -t    # 转换.py.txt为.py
+     python script.py /path/to/folder -a    # 执行完整流程
+     python script.py /path/to/folder -f    # 执行完整流程（含转换）
+     python script.py /path/to/folder -x    # 清除__pycache__文件夹
+
+【命令行参数说明】
+  -c, --clone     : 克隆文件夹并创建.py.txt文件
+  -d, --delete    : 删除克隆文件夹中的所有.py文件
+  -t, --convert   : 将.py.txt文件转换回.py文件 (可独立使用)
+  -a, --all       : 执行完整流程 (克隆 + 删除.py文件)
+  -f, --full      : 执行完整流程并转换 (克隆 + 删除.py文件 + 转换.py.txt为.py)
+  -x, --clean     : 清除所有__pycache__缓存文件夹
+  -h, --help      : 显示此帮助信息
+
+【工作流程示例】
+
+  场景1：A电脑 - 备份并转换Python文件
+  $ python script.py /project/myapp -a
+  结果：克隆项目，删除.py文件，保留.py.txt文件
+  
+  场景2：B电脑 - 恢复Python文件 (独立使用，不需要克隆)
+  $ python script.py /project/myapp_copy_20260828_152216 -t
+  结果：将.py.txt文件恢复为.py文件
+
+  场景3：清除缓存
+  $ python script.py /project/myapp -x
+  结果：删除所有__pycache__文件夹
+
+【注意事项】
+  • 转换功能可以独立使用，不需要先执行克隆
+  • 克隆文件夹会以 "原名称_copy_时间戳" 命名
+  • 删除操作前会要求用户确认
+  • 所有操作都不会影响源文件夹（除非明确指定）
+  • 清除__pycache__会释放磁盘空间
+
+【常见问题】
+  Q: 可以在不同电脑之间使用吗？
+  A: 可以！在A电脑执行克隆转换，将文件夹复制到B电脑，
+     然后在B电脑执行转换功能恢复.py文件。
+
+  Q: 转换功能需要先克隆吗？
+  A: 不需要！转换功能可以独立使用，直接处理任何包含.py.txt文件的文件夹。
+
+  Q: __pycache__是什么？
+  A: Python的字节码缓存文件夹，可以安全删除，不影响代码运行。
+"""
+    print(help_text)
+
+def get_folder_path_interactive(title="请输入要处理的文件夹路径"):
+    """交互式获取文件夹路径"""
+    print("\n" + "=" * 60)
+    print("🐍 Python文件管理工具")
+    print("=" * 60)
+    
+    while True:
+        folder_path = input(f"\n{title}: ").strip()
+        
+        if not folder_path:
+            print("✗ 路径不能为空，请重新输入")
+            continue
+        
+        # 处理相对路径
+        folder_path = Path(folder_path).expanduser().resolve()
+        
+        if not folder_path.exists():
+            print(f"✗ 文件夹不存在: {folder_path}")
+            print("  提示：请检查路径是否正确，或使用绝对路径")
+            retry = input("  是否重新输入？(y/N): ").strip().lower()
+            if retry != 'y' and retry != 'yes':
+                return None
+            continue
+        
+        if not folder_path.is_dir():
+            print(f"✗ 路径不是文件夹: {folder_path}")
+            retry = input("  是否重新输入？(y/N): ").strip().lower()
+            if retry != 'y' and retry != 'yes':
+                return None
+            continue
+        
+        return str(folder_path)
+
+def main():
+    # 检查是否有命令行参数
+    if len(sys.argv) == 1:
+        # 无参数运行，进入交互式模式
+        print("\n💡 提示: 使用 python script.py -h 查看完整帮助信息")
+        
+        # 获取文件夹路径
+        folder_path = get_folder_path_interactive()
+        if not folder_path:
+            print("\n程序退出")
+            return
+        
+        try:
+            manager = FileManager(folder_path)
+        except ValueError as e:
+            print(f"错误: {e}")
+            return
+        
+        # 交互式菜单模式
+        while True:
+            display_menu()
+            
+            # 显示当前文件夹信息
+            print(f"\n📁 当前文件夹: {manager.folder_path}")
+            if manager.copy_folder_path:
+                print(f"📂 克隆文件夹: {manager.copy_folder_path}")
+            else:
+                print("📂 克隆文件夹: 尚未创建")
+            
+            choice = input("\n请选择操作 (输入数字或命令): ").strip()
+            
+            if choice == '1' or choice.lower() == 'c':
+                print("\n执行克隆操作...")
+                manager.clone_folder()
+                
+            elif choice == '2' or choice.lower() == 'd':
+                print("\n执行删除操作...")
+                if not manager.copy_folder_path:
+                    print("✗ 请先执行克隆操作")
+                else:
+                    manager.delete_cloned_py_files()
+                
+            elif choice == '3' or choice.lower() == 't':
+                print("\n执行转换操作...")
+                # 询问用户是要转换当前文件夹还是克隆文件夹
+                print("\n请选择要转换的文件夹:")
+                print("  (1) 当前文件夹 (源文件夹)")
+                print("  (2) 克隆文件夹 (如果存在)")
+                print("  (3) 指定其他文件夹")
+                sub_choice = input("请选择 (1/2/3): ").strip()
+                
+                if sub_choice == '1':
+                    print(f"\n转换当前文件夹中的.py.txt文件: {manager.folder_path}")
+                    manager.convert_py_txt_to_py(manager.folder_path)
+                elif sub_choice == '2':
+                    if manager.copy_folder_path:
+                        print(f"\n转换克隆文件夹中的.py.txt文件: {manager.copy_folder_path}")
+                        manager.convert_py_txt_to_py(manager.copy_folder_path)
+                    else:
+                        print("✗ 克隆文件夹不存在，请先执行克隆操作")
+                elif sub_choice == '3':
+                    new_path = get_folder_path_interactive("请输入要转换的文件夹路径")
+                    if new_path:
+                        manager.convert_py_txt_to_py(new_path)
+                else:
+                    print("✗ 无效的选择")
+                
+            elif choice == '4' or choice.lower() == 'p':
+                print("\n查看文件夹中的.py文件...")
+                # 询问要查看哪个文件夹
+                print("\n请选择要查看的文件夹:")
+                print("  (1) 当前文件夹 (源文件夹)")
+                print("  (2) 克隆文件夹 (如果存在)")
+                sub_choice = input("请选择 (1/2): ").strip()
+                
+                if sub_choice == '1':
+                    manager.list_files('py', manager.folder_path)
+                elif sub_choice == '2':
+                    if manager.copy_folder_path:
+                        manager.list_files('py', manager.copy_folder_path)
+                    else:
+                        print("✗ 克隆文件夹不存在")
+                else:
+                    print("✗ 无效的选择")
+                
+            elif choice == '5' or choice.lower() == 'x':
+                print("\n查看文件夹中的.py.txt文件...")
+                # 询问要查看哪个文件夹
+                print("\n请选择要查看的文件夹:")
+                print("  (1) 当前文件夹 (源文件夹)")
+                print("  (2) 克隆文件夹 (如果存在)")
+                sub_choice = input("请选择 (1/2): ").strip()
+                
+                if sub_choice == '1':
+                    manager.list_files('py_txt', manager.folder_path)
+                elif sub_choice == '2':
+                    if manager.copy_folder_path:
+                        manager.list_files('py_txt', manager.copy_folder_path)
+                    else:
+                        print("✗ 克隆文件夹不存在")
+                else:
+                    print("✗ 无效的选择")
+                
+            elif choice == '6' or choice.lower() == 'a':
+                print("\n执行完整流程...")
+                if manager.clone_folder():
+                    print("\n" + "=" * 50)
+                    print("准备删除克隆文件夹中的.py文件...")
+                    print("=" * 50)
+                    manager.delete_cloned_py_files()
+                
+            elif choice == '7' or choice.lower() == 'f':
+                print("\n执行完整流程（含转换）...")
+                if manager.clone_folder():
+                    print("\n" + "=" * 50)
+                    print("准备删除克隆文件夹中的.py文件...")
+                    print("=" * 50)
+                    manager.delete_cloned_py_files()
+                    print("\n" + "=" * 50)
+                    print("准备转换.py.txt为.py文件...")
+                    print("=" * 50)
+                    manager.convert_py_txt_to_py(manager.copy_folder_path)
+                
+            elif choice == '8' or choice.lower() == 'e':
+                print("\n清除__pycache__缓存...")
+                # 询问要清除哪个文件夹的缓存
+                print("\n请选择要清除缓存的文件夹:")
+                print("  (1) 当前文件夹 (源文件夹)")
+                print("  (2) 克隆文件夹 (如果存在)")
+                print("  (3) 所有文件夹")
+                sub_choice = input("请选择 (1/2/3): ").strip()
+                
+                if sub_choice == '1':
+                    manager.clean_pycache(manager.folder_path)
+                elif sub_choice == '2':
+                    if manager.copy_folder_path:
+                        manager.clean_pycache(manager.copy_folder_path)
+                    else:
+                        print("✗ 克隆文件夹不存在")
+                elif sub_choice == '3':
+                    manager.clean_all_pycache()
+                else:
+                    print("✗ 无效的选择")
+                    
+            elif choice == '9' or choice.lower() == 'v':
+                print("\n查看__pycache__文件夹...")
+                # 询问要查看哪个文件夹
+                print("\n请选择要查看的文件夹:")
+                print("  (1) 当前文件夹 (源文件夹)")
+                print("  (2) 克隆文件夹 (如果存在)")
+                sub_choice = input("请选择 (1/2): ").strip()
+                
+                if sub_choice == '1':
+                    manager.list_files('pycache', manager.folder_path)
+                elif sub_choice == '2':
+                    if manager.copy_folder_path:
+                        manager.list_files('pycache', manager.copy_folder_path)
+                    else:
+                        print("✗ 克隆文件夹不存在")
+                else:
+                    print("✗ 无效的选择")
+                
+            elif choice.lower() in ['q', 'quit', 'exit']:
+                print("\n👋 程序退出")
+                break
+                
+            elif choice.lower() in ['h', 'help', '?']:
+                show_help()
+                
+            else:
+                print("\n✗ 无效的选择，请重新输入")
+                print("  提示: 输入 q 退出，输入 h 查看帮助")
+            
+            # 按回车继续
+            input("\n按回车键继续...")
+        
+        return
+    
+    # 有命令行参数，解析执行
+    parser = argparse.ArgumentParser(
+        description="Python文件管理工具 - 克隆文件夹并处理.py文件",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  python script.py /path/to/folder -c  # 直接克隆
+  python script.py /path/to/folder -d  # 删除克隆文件夹中的.py文件
+  python script.py /path/to/folder -t  # 转换.py.txt为.py (独立使用)
+  python script.py /path/to/folder -a  # 执行完整流程
+  python script.py /path/to/folder -f  # 执行完整流程（含转换）
+  python script.py /path/to/folder -x  # 清除__pycache__文件夹
+  python script.py                    # 交互式模式（无参数）
+        """
+    )
+    parser.add_argument('folder_path', nargs='?', help='目标文件夹路径')
+    parser.add_argument('-c', '--clone', action='store_true', help='直接执行克隆操作')
+    parser.add_argument('-d', '--delete', action='store_true', help='直接执行删除操作')
+    parser.add_argument('-t', '--convert', action='store_true', help='直接执行转换操作 (独立使用)')
+    parser.add_argument('-a', '--all', action='store_true', help='执行完整流程')
+    parser.add_argument('-f', '--full', action='store_true', help='执行完整流程并转换')
+    parser.add_argument('-x', '--clean', action='store_true', help='清除__pycache__缓存文件夹')
+    
+    args = parser.parse_args()
+    
+    # 如果没有提供文件夹路径，显示帮助
+    if not args.folder_path:
+        parser.print_help()
+        print("\n💡 提示: 使用 python script.py 进入交互式模式")
+        return
+    
+    try:
+        manager = FileManager(args.folder_path)
+    except ValueError as e:
+        print(f"错误: {e}")
+        sys.exit(1)
+    
+    # 执行对应的操作
+    if args.clean:
+        print("执行清除缓存操作...")
+        manager.clean_pycache(manager.folder_path)
+        return
+    
+    if args.convert:
+        print("执行转换操作...")
+        manager.convert_py_txt_to_py(manager.folder_path)
+        return
+    
+    if args.full:
+        print("执行完整流程（含转换）...")
+        if manager.clone_folder():
+            print("\n" + "=" * 50)
+            print("准备删除克隆文件夹中的.py文件...")
+            print("=" * 50)
+            manager.delete_cloned_py_files()
+            print("\n" + "=" * 50)
+            print("准备转换.py.txt为.py文件...")
+            print("=" * 50)
+            manager.convert_py_txt_to_py(manager.copy_folder_path)
+        return
+    
+    if args.all:
+        print("执行完整流程...")
+        if manager.clone_folder():
+            print("\n" + "=" * 50)
+            print("准备删除克隆文件夹中的.py文件...")
+            print("=" * 50)
+            manager.delete_cloned_py_files()
+        return
+    
+    if args.clone:
+        print("执行克隆操作...")
+        manager.clone_folder()
+        return
+    
+    if args.delete:
+        print("执行删除操作...")
+        if not manager.copy_folder_path:
+            print("✗ 请先执行克隆操作")
+            return
+        manager.delete_cloned_py_files()
+        return
+    
+    # 如果没有指定操作，显示帮助
+    parser.print_help()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n👋 程序被用户中断")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ 发生错误: {e}")
+        sys.exit(1)

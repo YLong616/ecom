@@ -1,131 +1,105 @@
-# 大乐透数据分析系统 (DLT Analyzer)
+# eCOM
 
-大乐透数据分析系统是一个用于中国超级大乐透彩票的历史数据分析、号码推荐和复盘查询的Web应用系统。
+> 跨平台（Windows + Linux）轻量级串口调试工具 —— 集 **AT 命令调试、AT 命令集循环压测、文件发送、串口日志** 于一体。
 
-## 项目简介
+---
 
-本系统提供完整的大乐透历史数据管理、号码频率统计分析、智能推荐号码、抽奖验证等功能，帮助彩民更好地分析号码走势。
+## ✨ 特性
 
-## 功能特性
+- **AT 命令调试**：ASCII / HEX / DEC / BIN 多种编码，send-on-enter 后缀，TX/RX 实时显示（蓝/绿）。
+- **AT list 循环压测**：把一组 AT 命令组织成列表，按**次数 / 时长**循环执行；自动校验每条命令的**预期结果**（contains / regex / exact），命中自定义 check 规则判为异常；输出按轮分段的结构化日志与汇总统计。
+- **文件发送**：分块写串口，带进度条与暂停/恢复。
+- **串口日志**：AT 日志与 DOS 日志双通道落盘（与输出框逐字节一致）。
+- **中英双语**：菜单实时切换。
+- **配置持久化**：串口参数、显示选项、AT 命令组等存于 `~/.ecom/config.json`。
+- **自定义 check 规则** + **AT list 导入/导出 CSV**。
 
-### 📊 数据管理
-- 自动抓取大乐透历史开奖数据
-- 本地数据持久化存储
-- 支持CSV/TXT格式导出
+---
 
-### 📈 统计分析
-- 号码出现频率统计
-- 可自定义分析期数范围（最近N期）
-- 前区+后区综合分析
-
-### 🎯 号码推荐
-- **智能推荐**：基于历史频率分析的智能选号
-- **随机推荐**：自定义范围的真随机号码生成
-
-### 🔍 复盘验证
-- 输入期号和选号进行复盘
-- 自动计算命中情况
-- 查看历史复盘记录
-
-### 💰 奖项查询
-- 中奖判断（支持任意选号对比）
-- 奖项规则说明
-- 开奖期号选择
-
-## 技术栈
-
-- **后端**: Python Flask + FastAPI
-- **前端**: HTML5 + CSS3 + JavaScript (原生)
-- **数据存储**: JSON本地文件
-
-## 目录结构
-
-```
-.
-├── app.py                  # Flask Web应用入口
-├── dlt_core.py             # 核心业务逻辑模块
-├── dlt/                    # FastAPI版本后端
-│   ├── app.py              # FastAPI应用
-│   └── dlt_core.py         # 核心逻辑
-├── templates/
-│   └── index.html          # 前端页面
-├── requirements.txt        # Python依赖
-└── .dlt_data/              # 数据存储目录
-    ├── history.json        # 历史开奖数据
-    ├── raw_history.json    # 原始完整数据
-    ├── predictions.json    # 推荐数据
-    └── latest_stats.json   # 最新统计
-```
-
-## 快速开始
+## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.8+
-- pip
+| 依赖 | 说明 |
+|---|---|
+| Python | **≥ 3.8** |
+| pyserial | `pip install pyserial`（或 `pip install .`） |
+| tkinter | Windows 自带；**Linux 需系统包**（见下） |
 
-### 安装依赖
+Linux 下 tkinter 是系统级依赖，pip 无法安装：
 
 ```bash
-pip install -r requirements.txt
+# Ubuntu / Debian
+sudo apt install python3-tk
+# Fedora
+sudo dnf install python3-tkinter
+# Arch
+sudo pacman -S tk
+# openSUSE
+sudo zypper install python3-tk
 ```
 
-### 运行应用
+### 运行
 
-**方式一：Flask版本**
 ```bash
-python app.py
+python main.py          # 开发运行
+# 或安装后：
+pip install .
+ecom start              # 启动图形界面
+ecom --version          # 查看版本
 ```
 
-**方式二：FastAPI版本**
+结束：关闭窗口（点 "x"）或在终端按 `Ctrl+C`。
+
+---
+
+## 📚 文档索引
+
+| 文档 | 中文 | English |
+|---|---|---|
+| **项目介绍**（定位 / 架构 / 依赖 / 结构） | [项目介绍](docs/PROJECT_OVERVIEW_zh.md) | [Project Overview](docs/PROJECT_OVERVIEW_en.md) |
+| **接口说明**（文件 / 方法 / 参数 / 调用关系） | [接口说明](docs/API_REFERENCE_zh.md) | [API Reference](docs/API_REFERENCE_en.md) |
+| **使用说明书**（图文 / 操作步骤） | [使用说明书](docs/USER_GUIDE_zh.md) | [User Guide](docs/USER_GUIDE_en.md) |
+| **已知限制与遗留项** | [已知限制](docs/KNOWN_ISSUES_zh.md) | [Known Issues](docs/KNOWN_ISSUES_en.md) |
+
+> 完整接口与调用关系请看**接口说明**；界面截图见**使用说明书**的「截图需求清单」（本地运行后补图）。
+
+---
+
+## 🗂 项目结构（简）
+
+```
+eCOM/
+├── main.py                 # GUI 入口
+├── ecom/                   # 源码包
+│   ├── app.py              # 主窗口 + run()
+│   ├── cli.py              # 命令行入口
+│   ├── at_panel.py         # AT 命令面板
+│   ├── stress_panel.py     # 压力模式面板（压测状态机）
+│   ├── stress_model.py     # 数据模型 / 匹配 / 统计 / 结束条件
+│   ├── stress_io.py        # AT list CSV 模版/导入/导出
+│   ├── file_panel.py       # 文件发送
+│   ├── serial_core.py      # 串口封装（读线程/队列/计数）
+│   ├── codec.py            # 编解码
+│   ├── logger.py           # 日志落盘
+│   ├── config.py           # 配置持久化
+│   ├── i18n.py             # 中英翻译表
+│   └── tooltip.py          # 悬浮提示
+├── tests/                  # 单元/回归测试
+├── docs/                   # 文档 + 界面示意
+└── PROGRESS.md             # 开发/修复进度日志
+```
+
+---
+
+## 🧪 测试
+
 ```bash
-cd dlt
-uvicorn app:app --reload --port 8000
+python -m unittest discover tests
 ```
 
-访问 `http://localhost:5000` (Flask) 或 `http://localhost:8000` (FastAPI)
+---
 
-## API 接口
+## 📄 许可
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/latest` | GET | 获取最新开奖信息 |
-| `/api/history` | GET | 获取历史开奖列表 |
-| `/api/history/raw` | GET | 获取完整原始数据 |
-| `/api/stats` | GET/POST | 号码频率统计 |
-| `/api/recommend` | GET/POST | 生成推荐号码 |
-| `/api/review` | POST | 复盘验证 |
-| `/api/prize-check` | POST | 中奖检查 |
-| `/api/prize-rules` | GET | 奖项规则 |
-| `/api/all-combos` | GET | 全部组合查询 |
-| `/api/appeared-combos` | GET | 已出现组合 |
-| `/api/random-unopened` | GET | 随机未开组合 |
-| `/api/export/csv` | GET | 导出CSV |
-| `/api/export/txt` | GET | 导出TXT |
-| `/api/fetch` | POST | 抓取最新数据 |
-| `/api/archive` | GET | 复盘历史记录 |
-
-## 奖项规则
-
-大乐透中奖规则：
-- **一等奖**：前区5个+后区2个全中 (浮动奖金)
-- **二等奖**：前区5个+后区中1个 (浮动奖金)
-- **三等奖**：前区5个全中 (10000元)
-- **四等奖**：前区4个+后区2个 (3000元)
-- **五等奖**：前区4个+后区中1个 (300元)
-- **六等奖**：前区4个全中 (200元)
-- **七等奖**：前区3个+后区2个 (100元)
-- **八等奖**：前区3个+后区中1个 (15元)
-- **九等奖**：前区中3个 或 后区中2个 (5元)
-
-## 使用说明
-
-1. **首次使用**：点击"抓取数据"按钮获取最新开奖历史
-2. **查看分析**：在"统计分析"标签页查看号码频率
-3. **获取推荐**：在"号码推荐"标签页获取智能推荐号码
-4. **复盘验证**：选择期号，输入选号进行复盘
-5. **导出数据**：导出历史数据进行离线分析
-
-##  License
-
-本项目仅供学习和研究使用，请遵守相关法律法规。彩票投注有风险，请理性消费。
+以 **MIT License** 开源（见 `pyproject.toml` 的 `license` 字段）。

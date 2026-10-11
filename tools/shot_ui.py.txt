@@ -1,0 +1,52 @@
+# -*- coding: utf-8 -*-
+"""可视化走查：抓「顶部菜单入口」条 + 「编辑预期结果」对话框（三种匹配模式各一张）。
+
+用法：python tools/shot_ui.py [contains|regex|exact]
+输出：tools/ui_shot_header.bmp / ui_shot_dialog_<mode>.bmp
+"""
+import os
+import sys
+import tkinter as tk
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+
+from ecom.app import EcomApp          # noqa: E402
+from win_grab import grab_window      # noqa: E402
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "regex"
+
+root = tk.Tk()
+app = EcomApp(root)
+root.geometry("1180x800+20+20")
+root.deiconify()
+root.update()
+root.lift()
+root.focus_force()
+root.update()
+
+frame = int(root.wm_frame(), 16)
+print("header label =", repr(app.mode_btn.cget("text")))
+print("grab header:", grab_window(frame, os.path.join(HERE, "ui_shot_header.bmp"), rows=70))
+
+app._switch_mode("stress")
+root.update()
+panel = app._get_stress_view()
+root.update()
+panel._edit_expected(0)
+root.update()
+dlg = [w for w in panel.winfo_children() if isinstance(w, tk.Toplevel)][0]
+dlg.geometry("620x640+560+50")
+dlg.deiconify()
+dlg.lift()
+dlg.focus_force()
+dlg.update()
+dlg._mode_var.set(panel._t("stress_match_" + mode))
+dlg._refresh_example()
+dlg.update()
+out = os.path.join(HERE, "ui_shot_dialog_%s.bmp" % mode)
+print("grab dialog:", grab_window(int(dlg.wm_frame(), 16), out))
+print("example head:", repr(dlg._example_text.get("1.0", "2.0")))
+dlg.destroy()
+root.destroy()

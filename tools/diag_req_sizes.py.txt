@@ -1,0 +1,50 @@
+# -*- coding: utf-8 -*-
+"""量两种模式在各窗口尺寸下的自然尺寸与（滚动条出现时的）可视区，用于定滚动策略。"""
+import os
+import sys
+import tkinter as tk
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ecom.app import EcomApp  # noqa: E402
+
+root = tk.Tk()
+root.withdraw()
+app = EcomApp(root)
+try:
+    root.attributes("-alpha", 0.0)
+except tk.TclError:
+    pass
+root.deiconify()
+root.update()
+
+
+def show(tag):
+    c, cv = app.content, app.page_canvas
+    print("%-22s canvas=%sx%s  content(实际)=%sx%s  content(自然)=%sx%s  vbar=%s hbar=%s" % (
+        tag, cv.winfo_width(), cv.winfo_height(),
+        c.winfo_width(), c.winfo_height(),
+        c.winfo_reqwidth(), c.winfo_reqheight(),
+        app.page_vbar.grid_info() != {}, app.page_hbar.grid_info() != {}))
+
+
+for size in ("1080x900", "900x800", "760x600", "620x460"):
+    root.geometry(size)
+    root.update()
+    show("AT  " + size)
+
+sp = app._get_stress_view()
+app._switch_mode("stress")
+root.update()
+for size in ("1080x900", "900x800", "760x600", "620x460"):
+    root.geometry(size)
+    root.update()
+    show("压力 " + size)
+
+# 关掉自动同步，看看"自然尺寸"是否被我的 max() 逻辑撑大
+print("---- 不 pin 尺寸（原生按需）对比 ----")
+root.geometry("1080x900")
+root.update()
+print("压力模式 canvas=%sx%s  内容自然=%sx%s" % (
+    app.page_canvas.winfo_width(), app.page_canvas.winfo_height(),
+    app.content.winfo_reqwidth(), app.content.winfo_reqheight()))
+root.destroy()

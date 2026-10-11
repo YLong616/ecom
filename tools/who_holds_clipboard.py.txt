@@ -1,0 +1,39 @@
+# -*- coding: utf-8 -*-
+"""查出当前占用（打开）剪贴板的是哪个进程：GetOpenClipboardWindow -> HWND -> PID -> 进程名。"""
+import ctypes
+import ctypes.wintypes as wt
+import os
+import subprocess
+
+u = ctypes.windll.user32
+k = ctypes.windll.kernel32
+H = ctypes.c_void_p
+u.GetOpenClipboardWindow.restype = wt.HWND
+u.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+k.OpenProcess.restype = H
+k.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+k.QueryFullProcessImageNameW.argtypes = [H, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+
+hwnd = u.GetOpenClipboardWindow()
+print("GetOpenClipboardWindow ->", hwnd)
+if hwnd:
+    pid = wt.DWORD(0)
+    u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    print("占用进程 PID:", pid.value)
+    h = k.OpenProcess(0x1000, False, pid.value)      # PROCESS_QUERY_LIMITED_INFORMATION
+    if h:
+        buf = ctypes.create_unicode_buffer(1024)
+        size = wt.DWORD(1024)
+        if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+            print("占用进程路径:", buf.value)
+        k.CloseHandle(h)
+    else:
+        print("OpenProcess 失败（权限），尝试 tasklist 按 PID 查：")
+    out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid.value, "/V", "/FO", "LIST"],
+                         capture_output=True)
+    print(out.stdout.decode("gbk", "replace")[:600])
+else:
+    print("当前没有进程“打开”剪贴板 —— 那失败可能是别的原因（如助手子进程被拦）")
+print("tasklist python:", subprocess.run(["tasklist", "/FI", "IMAGENAME eq python.exe",
+                                         "/FO", "TABLE"], capture_output=True).stdout
+      .decode("gbk", "replace")[:300])

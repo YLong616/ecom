@@ -1,0 +1,527 @@
+# -*- coding: utf-8 -*-
+"""宏定义管理窗口（独立 Toplevel，居中于主窗口，不动主界面布局）。
+
+结构：一行说明 → 工具条（新增 / 保存 / 一键删除 + 状态）→ 表格（只有横线，无竖线）
+→ 分页 → 关闭。表格列：多选框 | 宏名称 key（可编辑） | 宏值 value（可编辑） |
+长度（value 渲染后的 UTF-8 字节数） | 编辑 | 删除。
+
+保存语义：只有点「保存」才写入配置；不保存关闭即作废（因此行内删除/一键删除不做二次确认）。
+"""
+from __future__ import annotations
+
+import math
+import tkinter as tk
+from tkinter import ttk
+
+from . import macro
+
+PAGE_SIZE = 10
+
+
+def _fuzzy_match(needle: str, hay: str) -> bool:
+    """模糊匹配：needle 的字符按顺序出现在 hay 里即算命中（dta -> data）。"""
+    if not needle:
+        return True
+    it = iter(hay)
+    return all(ch in it for ch in needle)
+
+
+
+class MacroPanel:
+    def __init__(self, app):
+        self.app = app
+        self.P = app.P
+        self.win = tk.Toplevel(app.root)
+        self.win.title(app._t("macro_title"))
+        try:
+            self.win.transient(app.root)
+        except tk.TclError:
+            pass
+        self.rows = [{"key": str(r.get("key", "")), "value": str(r.get("value", ""))}
+                     for r in (app.macro_items() or [])]
+        self._dirty = 0
+        self._page = 1
+        self._checked = set()
+        self._vars = {}
+        self._entries = {}
+        self._syncing = False
+
+        self._build()
+        self._render()
+        self._center(780, 560)
+
+    # ------------------------------------------------------------ 基础
+    def _t(self, key, **fmt):
+        return self.app._t(key, **fmt)
+
+    def _center(self, w, h):
+        win = self.win
+        win.update_idletasks()
+        root = self.app.root
+        try:
+            px, py = root.winfo_rootx(), root.winfo_rooty()
+            pw, ph = root.winfo_width(), root.winfo_height()
+        except tk.TclError:
+            px = py = 0
+            pw = ph = 0
+        x = px + max(0, (pw - w) // 2)
+        y = py + max(0, (ph - h) // 3)
+        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+        x = max(0, min(x, sw - w))
+        y = max(0, min(y, sh - h))
+        win.geometry("%dx%d+%d+%d" % (w, h, x, y))
+        win.minsize(660, 420)
+
+    # ------------------------------------------------------------ 构建
+    def _ensure_styles(self):
+        """三个工具按钮三种颜色：新增=主色蓝、保存=成功绿、一键删除=危险红。"""
+        st = ttk.Style(self.win)
+        st.configure("MacroAdd.TButton", background=self.P["primary"],
+                     foreground="#FFFFFF", padding=(10, 4))
+        st.map("MacroAdd.TButton",
+               background=[("active", self.P["primary_h"]), ("pressed", self.P["primary_h"])],
+               foreground=[("active", "#FFFFFF")])
+        st.configure("MacroSave.TButton", background=self.P["success"],
+                     foreground="#FFFFFF", padding=(10, 4))
+        st.map("MacroSave.TButton",
+               background=[("active", self.P["success_h"]), ("pressed", self.P["success_h"])],
+               foreground=[("active", "#FFFFFF")])
+        st.configure("MacroDel.TButton", background=self.P["danger"],
+                     foreground="#FFFFFF", padding=(10, 4))
+        st.map("MacroDel.TButton",
+               background=[("active", self.P["danger_h"]), ("pressed", self.P["danger_h"])],
+               foreground=[("active", "#FFFFFF")])
+
+    def _build(self):
+        bg = self.P["bg"]
+        self.win.columnconfigure(0, weight=1)
+        self.win.rowconfigure(2, weight=1)
+
+        tk.Label(self.win, text=self._t("macro_desc"), justify="left", anchor="w",
+                 bg=bg, fg=self.P["muted"], wraplength=740,
+                 font=self.app.ui_font).grid(row=0, column=0, sticky="ew",
+                                             padx=10, pady=(10, 4))
+
+        self._ensure_styles()
+        bar = ttk.Frame(self.win)
+        bar.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+        for key, cmd, style in (("macro_add", self._add, "MacroAdd.TButton"),
+                                ("macro_save", self._save, "MacroSave.TButton"),
+                                ("macro_del_checked", self._del_checked, "MacroDel.TButton")):
+            ttk.Button(bar, text=self._t(key), command=cmd,
+                       style=style).pack(side="left", padx=(0, 6))
+        # 搜索：放在「一键删除」右边（宏多了以后按名字/内容快速定位）
+        ttk.Label(bar, text=self._t("macro_search_label"),
+                  style="Muted.TLabel").pack(side="left", padx=(14, 4))
+        self.search_var = tk.StringVar(value="")
+        search_ent = ttk.Entry(bar, textvariable=self.search_var, width=18)
+        search_ent.pack(side="left")
+        ttk.Button(bar, text=self._t("macro_search_clear"), width=3,
+                   command=lambda: self.search_var.set("")).pack(side="left", padx=(4, 0))
+        self.search_var.trace_add("write", lambda *_: self._on_search())
+
+        self.status = ttk.Label(bar, text="", style="Muted.TLabel")
+        self.status.pack(side="right")
+
+        table = ttk.Frame(self.win, style="Surface.TFrame")
+        table.grid(row=2, column=0, sticky="nsew", padx=8)
+        table.columnconfigure(0, weight=1)
+        table.rowconfigure(0, weight=1)
+        self.table = table
+        # 表头与数据行**共用同一个 grid**：列宽由同一套配置决定，天然对齐
+        # （分开两个 Frame 各算各的列宽，长度/操作列就会错位）
+        grid = ttk.Frame(table, style="Surface.TFrame")
+        grid.grid(row=0, column=0, sticky="nsew")
+        self.grid_frame = grid
+        for col, minsize in ((0, 28), (1, 180), (3, 96), (4, 66), (5, 66)):
+            grid.columnconfigure(col, minsize=minsize)
+        grid.columnconfigure(2, weight=1)          # value 列随窗口拉伸
+        self._row_widgets = []
+
+        self.all_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(grid, variable=self.all_var, command=self._toggle_all,
+                       bg=self.P["surface"], fg=self.P["text"],
+                       activebackground=self.P["surface"], activeforeground=self.P["text"],
+                       selectcolor=self.P["surface"], highlightthickness=0,
+                       bd=0).grid(row=0, column=0, padx=(2, 2), pady=2)
+        ttk.Label(grid, text=self._t("macro_col_key"),
+                  style="MutedSurface.TLabel").grid(row=0, column=1, sticky="w",
+                                                     padx=(2, 4))
+        ttk.Label(grid, text=self._t("macro_col_value"),
+                  style="MutedSurface.TLabel").grid(row=0, column=2, sticky="w",
+                                                     padx=(2, 4))
+        ttk.Label(grid, text=self._t("macro_col_len"),
+                  style="MutedSurface.TLabel", anchor="e").grid(row=0, column=3,
+                                                                sticky="e", padx=(4, 4))
+        ttk.Label(grid, text=self._t("macro_col_ops"),
+                  style="MutedSurface.TLabel").grid(row=0, column=4, columnspan=2,
+                                                     sticky="w", padx=(2, 4))
+        ttk.Separator(grid, orient="horizontal").grid(row=1, column=0, columnspan=6,
+                                                       sticky="ew")
+        pager = ttk.Frame(self.win)
+        pager.grid(row=3, column=0, sticky="ew", padx=8, pady=(6, 0))
+        self.prev_btn = ttk.Button(pager, text=self._t("macro_prev"), width=7,
+                                   command=lambda: self._goto(self._page - 1))
+        self.prev_btn.pack(side="left")
+        self.page_lbl = ttk.Label(pager, text="", style="Muted.TLabel")
+        self.page_lbl.pack(side="left", padx=8)
+        self.next_btn = ttk.Button(pager, text=self._t("macro_next"), width=7,
+                                   command=lambda: self._goto(self._page + 1))
+        self.next_btn.pack(side="left")
+        ttk.Button(pager, text=self._t("macro_close"),
+                   command=self.win.destroy).pack(side="right")
+
+    # ------------------------------------------------------------ 渲染
+    def _search_query(self):
+        """当前搜索词（小写、去空白）。"""
+        var = getattr(self, "search_var", None)
+        return (var.get() if var is not None else "").strip().lower()
+
+    def _filtered_indices(self):
+        """按搜索词过滤后的**绝对行号**列表（模糊：宏名子序列 或 宏值包含）。"""
+        q = self._search_query()
+        if not q:
+            return list(range(len(self.rows)))
+        out = []
+        for i, r in enumerate(self.rows):
+            key = str(r.get("key", ""))
+            value = str(r.get("value", ""))
+            if _fuzzy_match(q, key.lower()) or q in value.lower():
+                out.append(i)
+        return out
+
+    def _visible_page(self):
+        """当前页在过滤结果里的绝对行号（全选/渲染共用）。"""
+        view = self._filtered_indices()
+        start = (self._page - 1) * PAGE_SIZE
+        return view[start:start + PAGE_SIZE]
+
+    def _pages(self):
+        n = len(self._filtered_indices())
+        return max(1, math.ceil(n / PAGE_SIZE)) if n else 1
+
+    def _on_search(self):
+        """搜索词变化：回到第 1 页重画（不改动数据，保存仍保存全部）。"""
+        self._page = 1
+        self._render()
+
+    def _render(self):
+        # 只销毁数据行，表头（row 0/1）保持不动 —— 表头与行同 grid，列宽才对得齐
+        for w in self._row_widgets:
+            w.destroy()
+        self._row_widgets = []
+        self._vars = {}
+        self._entries = {}
+        g = self.grid_frame
+        self._page = min(max(1, self._page), self._pages())
+        page_idx = self._visible_page()
+        if not page_idx:
+            msg = (self._t("macro_search_none") if self._search_query()
+                   else self._t("macro_empty"))
+            lbl = ttk.Label(g, text=msg, style="MutedSurface.TLabel")
+            lbl.grid(row=2, column=0, columnspan=6, sticky="w", padx=6, pady=10)
+            self._row_widgets.append(lbl)
+        for i, idx in enumerate(page_idx):
+            row = self.rows[idx]
+            r = 2 + i * 2
+            chk = tk.BooleanVar(value=idx in self._checked)
+            cb = tk.Checkbutton(g, variable=chk, command=lambda i=idx: self._toggle(i),
+                                bg=self.P["surface"], fg=self.P["text"],
+                                activebackground=self.P["surface"],
+                                activeforeground=self.P["text"],
+                                selectcolor=self.P["surface"], highlightthickness=0,
+                                bd=0)
+            cb.grid(row=r, column=0, padx=(2, 2), pady=3)
+            kvar = tk.StringVar(value=row["key"])
+            vvar = tk.StringVar(value=row["value"])
+            ke = ttk.Entry(g, textvariable=kvar)
+            ke.grid(row=r, column=1, sticky="ew", padx=(2, 4), pady=3)
+            ve = ttk.Entry(g, textvariable=vvar)
+            ve.grid(row=r, column=2, sticky="ew", padx=(2, 4), pady=3)
+            lenlbl = tk.Label(g, text="", anchor="e",
+                              bg=self.P["surface"], fg=self.P["muted"],
+                              font=self.app.ui_font)
+            lenlbl.grid(row=r, column=3, sticky="e", padx=(4, 4), pady=3)
+            be = ttk.Button(g, text=self._t("macro_col_edit"), width=5,
+                            command=lambda i=idx: self._edit(i))
+            be.grid(row=r, column=4, padx=(2, 2))
+            bd = ttk.Button(g, text=self._t("macro_col_del"), width=5,
+                            command=lambda i=idx: self._del(i))
+            bd.grid(row=r, column=5, padx=(2, 2))
+            sep = ttk.Separator(g, orient="horizontal")
+            sep.grid(row=r + 1, column=0, columnspan=6, sticky="ew")
+            self._row_widgets.extend([cb, ke, ve, lenlbl, be, bd, sep])
+            kvar.trace_add("write", lambda *_, i=idx: self._changed(i))
+            vvar.trace_add("write", lambda *_, i=idx: self._changed(i))
+            self._vars[idx] = {"chk": chk, "key": kvar, "value": vvar, "len": lenlbl}
+            self._entries[idx] = ke
+        self._sync_all_var()
+        self._update_lengths()
+        self._update_pager()
+        self._update_status()
+    def _update_pager(self):
+        self.page_lbl.configure(text=self._t("macro_page", i=self._page, n=self._pages()))
+        self.prev_btn.configure(state="normal" if self._page > 1 else "disabled")
+        self.next_btn.configure(state="normal" if self._page < self._pages() else "disabled")
+
+    def _update_status(self, extra="", kind=None):
+        """状态文字：未保存=主色、已保存=绿、提示/失败=按 kind 着色。"""
+        if extra:
+            txt = extra
+        elif self._dirty:
+            txt = self._t("macro_status_dirty", n=self._dirty)
+        else:
+            txt = self._t("macro_status_saved")
+        if kind is None:
+            kind = "warn" if self._dirty else "ok"
+        if self._search_query():
+            txt = "%s ｜ %s" % (txt, self._t("macro_search_count",
+                                            n=len(self._filtered_indices()),
+                                            total=len(self.rows)))
+        color = {"ok": self.P["success"], "fail": self.P["danger"],
+                 "warn": self.P["primary"], "info": self.P["muted"]}.get(
+                     kind, self.P["muted"])
+        self.status.configure(text=txt, foreground=color)
+
+    def _len_text(self, idx):
+        """该行 value 渲染后的长度文本 + 是否成功。"""
+        val, err = macro.render_value(self.rows[idx]["value"])
+        if err:
+            return self._t("macro_len_bad"), False
+        return self._t("macro_len_bytes", n=macro.byte_len(val)), True
+
+    def _update_lengths(self):
+        for idx, v in self._vars.items():
+            if idx >= len(self.rows):
+                continue
+            text, ok = self._len_text(idx)
+            v["len"].configure(text=text, fg=self.P["muted"] if ok else self.P["danger"])
+
+    # ------------------------------------------------------------ 交互
+    def _changed(self, idx):
+        if self._syncing or idx >= len(self.rows):
+            return
+        v = self._vars.get(idx)
+        if not v:
+            return
+        key = v["key"].get().strip()
+        value = v["value"].get()
+        if self.rows[idx]["key"] == key and self.rows[idx]["value"] == value:
+            return
+        self.rows[idx]["key"] = key
+        self.rows[idx]["value"] = value
+        self._dirty += 1
+        text, ok = self._len_text(idx)
+        v["len"].configure(text=text, fg=self.P["muted"] if ok else self.P["danger"])
+        # 宏名即时校验：含空格/非法字符立刻红字提示（不用等保存）
+        bad = macro.validate_key(key)
+        if bad == "space":
+            self._update_status(self._t("macro_err_key_space", name=key), "fail")
+            return
+        if bad == "bad":
+            self._update_status(self._t("macro_err_key_bad", name=key), "fail")
+            return
+        self._update_status()
+
+    def _toggle(self, idx):
+        if idx in self._checked:
+            self._checked.discard(idx)
+        else:
+            self._checked.add(idx)
+        self._sync_all_var()
+        self._update_status()
+
+    def _toggle_all(self):
+        page = self._visible_page()          # 只作用于当前页「看得到」的行
+        if self.all_var.get():
+            self._checked.update(page)
+        else:
+            self._checked.difference_update(page)
+        for idx in page:
+            if idx in self._vars:
+                self._vars[idx]["chk"].set(idx in self._checked)
+        self._update_status()
+
+    def _sync_all_var(self):
+        page = self._visible_page()
+        self.all_var.set(bool(page) and all(i in self._checked for i in page))
+
+    def _goto(self, page):
+        self._page = min(max(1, page), self._pages())
+        self._render()
+
+    def _add(self):
+        if self._search_query():
+            self.search_var.set("")          # 清空搜索，否则新增的行可能被过滤掉看不见
+        self.rows.append({"key": "", "value": ""})
+        self._dirty += 1
+        self._page = self._pages()
+        self._render()
+        idx = len(self.rows) - 1
+        entry = self._entries.get(idx)
+        if entry is not None:
+            entry.focus_set()
+
+    def _del(self, idx):
+        if idx >= len(self.rows):
+            return
+        self.rows.pop(idx)
+        self._checked = {i if i < idx else i - 1 for i in self._checked if i != idx}
+        self._dirty += 1
+        self._render()
+
+    def _del_checked(self):
+        if not self._checked:
+            self._update_status(self._t("macro_del_none"), "warn")
+            return
+        n = len(self._checked)
+        self.rows = [r for i, r in enumerate(self.rows) if i not in self._checked]
+        self._checked.clear()
+        self._dirty += n
+        self._render()
+        self._update_status(self._t("macro_del_done", n=n), "info")
+
+    def _edit(self, idx):
+        """行内「编辑」：给长 value 一个大编辑框（顺手显示实时长度）。"""
+        row = self.rows[idx]
+        dlg = tk.Toplevel(self.win)
+        dlg.title(self._t("macro_edit_title"))
+        dlg.transient(self.win)
+        dlg.grab_set()
+        dlg.columnconfigure(0, weight=1)
+        dlg.rowconfigure(3, weight=1)
+        kvar = tk.StringVar(value=row["key"])
+        ttk.Label(dlg, text=self._t("macro_col_key"),
+                  style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=10, pady=(10, 0))
+        ttk.Entry(dlg, textvariable=kvar).grid(row=1, column=0, sticky="ew", padx=10)
+        ttk.Label(dlg, text=self._t("macro_col_value"),
+                  style="Muted.TLabel").grid(row=2, column=0, sticky="w", padx=10, pady=(8, 0))
+        txt = tk.Text(dlg, height=7, wrap="none", undo=True, font=self.app.out_font,
+                      bg="#FFFFFF", fg=self.P["text"], relief="flat",
+                      highlightthickness=1, highlightbackground=self.P["border"],
+                      highlightcolor=self.P["border"], padx=4, pady=4)
+        txt.grid(row=3, column=0, sticky="nsew", padx=10, pady=(2, 0))
+        txt.insert("1.0", row["value"])
+        info = ttk.Label(dlg, text="", style="Muted.TLabel")
+        info.grid(row=4, column=0, sticky="w", padx=10, pady=(4, 0))
+        prev = ttk.Label(dlg, text="", style="Muted.TLabel",
+                         wraplength=560, justify="left")
+        prev.grid(row=5, column=0, sticky="w", padx=10, pady=(2, 0))
+
+        def refresh(*_):
+            val, err = macro.render_value(txt.get("1.0", "end-1c"))
+            if err:
+                info.configure(text=self._t("macro_len_bad") + "：" + err)
+                prev.configure(text="")
+            else:
+                info.configure(text=self._t("macro_len_bytes", n=macro.byte_len(val)))
+                head = " ".join(val[:80].splitlines())      # 真换行换成空格，便于一眼看
+                prev.configure(text=self._t("macro_preview") + head
+                               + ("…" if len(val) > 80 else ""))
+
+        txt.bind("<KeyRelease>", refresh)
+        refresh()
+        btns = ttk.Frame(dlg)
+        btns.grid(row=6, column=0, sticky="e", padx=10, pady=10)
+
+        def ok():
+            self.rows[idx]["key"] = kvar.get().strip()
+            self.rows[idx]["value"] = txt.get("1.0", "end-1c")
+            self._dirty += 1
+            dlg.destroy()
+            self._render()
+
+        ttk.Button(btns, text=self._t("macro_ok"), command=ok).pack(side="right")
+        ttk.Button(btns, text=self._t("macro_cancel"),
+                   command=dlg.destroy).pack(side="right", padx=(0, 6))
+        self._center_on(dlg, 620, 370)
+        txt.focus_set()
+
+    def _center_on(self, dlg, w, h):
+        dlg.update_idletasks()
+        x = self.win.winfo_rootx() + max(0, (self.win.winfo_width() - w) // 2)
+        y = self.win.winfo_rooty() + max(0, (self.win.winfo_height() - h) // 3)
+        x = max(0, min(x, dlg.winfo_screenwidth() - w))
+        y = max(0, min(y, dlg.winfo_screenheight() - h))
+        dlg.geometry("%dx%d+%d+%d" % (w, h, x, y))
+
+    # ------------------------------------------------------------ 保存
+    def _problems(self):
+        problems = []
+        seen = {}
+        seen_low = {}
+        for i, row in enumerate(self.rows):
+            key = str(row.get("key", "")).strip()
+            bad = macro.validate_key(key)
+            if bad == "empty":
+                problems.append((i, self._t("macro_err_key_empty")))
+                continue
+            if bad == "space":
+                problems.append((i, self._t("macro_err_key_space", name=key)))
+                continue
+            if bad:
+                problems.append((i, self._t("macro_err_key_bad", name=key)))
+                continue
+            low = key.lower()
+            if key in seen:
+                problems.append((i, self._t("macro_err_key_dup", name=key)))
+                continue
+            if low in seen_low:
+                problems.append((i, self._t("macro_err_key_dup_ci", name=key,
+                                                other=seen_low[low])))
+                continue
+            seen[key] = i
+            seen_low[low] = key
+            _val, err = macro.render_value(row.get("value", ""))
+            if err:
+                problems.append((i, self._t("macro_err_value", name=key, e=err)))
+        return problems
+
+    def _save(self):
+        problems = self._problems()
+        if problems:
+            first = problems[0]
+            self._page = first[0] // PAGE_SIZE + 1
+            self._render()
+            entry = self._entries.get(first[0])      # 直接定位到出错那一行
+            if entry is not None:
+                try:
+                    entry.focus_set()
+                    entry.selection_range(0, "end")
+                except tk.TclError:
+                    pass
+            self._update_status(self._t("macro_save_fail", msg=first[1]), "fail")
+            return False
+        try:
+            self.app.save_macro_items(self.rows)
+        except Exception as exc:
+            self._update_status(self._t("macro_save_error", e=exc), "fail")
+            return False
+        self._dirty = 0
+        self._update_lengths()
+        self._update_status(self._t("macro_saved_ok", n=len(self.rows)), "ok")
+        return True
+
+
+def show_macros(app):
+    """打开（或前置）宏定义窗口；同一时刻只保留一个。"""
+    win = getattr(app, "_macro_win", None)
+    if win is not None:
+        try:
+            if win.winfo_exists():
+                win.deiconify()
+                win.lift()
+                win.focus_force()
+                return app._macro_panel
+        except tk.TclError:
+            pass
+    panel = MacroPanel(app)
+    app._macro_panel = panel
+    app._macro_win = panel.win
+
+    def _forget(_e=None):
+        app._macro_win = None
+        app._macro_panel = None
+
+    panel.win.bind("<Destroy>", lambda e: _forget() if e.widget is panel.win else None, add="+")
+    return panel

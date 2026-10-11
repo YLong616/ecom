@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>软著代码过滤器</title>
+<style>
+/* ===== 设计变量 ===== */
+:root{
+  --bg:#f3f6fb; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  --accent:#0ea5e9; --accent-strong:#0284c7; --accent-soft:#e0f2fe; --accent-line:#7dd3fc;
+  --ok:#10b981; --warn:#f59e0b; --code-bg:#f8fafc; --dark:#0f172a;
+  --mono:"JetBrains Mono","Cascadia Mono","Consolas","Menlo","Courier New",monospace;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
+  font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  min-width:1120px;overflow:hidden}
+button{font:inherit;cursor:pointer}
+input,select{font:inherit;color:var(--ink)}
+h1,h2,h3{margin:0;font-weight:600}
+.hidden{display:none!important}
+
+/* ===== 顶栏（浅色 + 软件信息醒目卡片） ===== */
+.app-header{flex:none;background:#fff;border-bottom:1px solid var(--line);
+  padding:12px 24px;display:flex;align-items:center;gap:28px}
+.brand{display:flex;align-items:center;gap:12px;flex:none}
+.brand .logo{width:36px;height:36px;border-radius:10px;flex:none;
+  background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 10px rgba(14,165,233,.3)}
+.brand .tt{display:flex;flex-direction:column;line-height:1.25}
+.brand .tt b{font-size:16px;font-weight:700;letter-spacing:.5px}
+.brand .tt span{font-size:11px;color:var(--muted)}
+.soft-info{flex:1;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;
+  background:linear-gradient(180deg,var(--accent-soft),#f0f9ff);
+  border:1px solid var(--accent-line);border-radius:var(--radius);
+  padding:10px 16px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:11px;color:var(--accent-strong);font-weight:600;letter-spacing:.4px}
+.field input{background:#fff;border:1px solid #cbd5e1;border-radius:8px;
+  padding:7px 11px;font-size:14px;width:210px;transition:border-color .15s,box-shadow .15s}
+.field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(14,165,233,.15)}
+.field.w2 input{width:110px}
+.field.w3 input{width:230px}
+.field.w5 input{width:270px}
+
+/* ===== 主区（左右分栏，各自独立滚动） ===== */
+.app-main{flex:1;min-height:0;display:grid;grid-template-columns:432px 1fr;gap:16px;
+  padding:16px 24px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:18px 20px;overflow-y:auto;min-height:0}
+.panel h2{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.panel h2 .step{display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:7px;flex:none;
+  background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;font-size:12px;font-weight:700}
+.panel h2 .rescan-btn{display:inline-flex;align-items:center;gap:5px;margin-left:auto;
+  border:1px solid var(--accent-line);background:var(--accent-soft);color:var(--accent-strong);
+  border-radius:8px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;
+  transition:all .15s;flex:none}
+.panel h2 .rescan-btn:hover{background:#dbeafe;border-color:#93c5fd}
+.panel .hint{color:var(--muted);font-size:12.5px;margin:6px 0 14px;line-height:1.7}
+.sec{margin-bottom:18px}
+.sec:last-child{margin-bottom:0}
+.sec-title{font-size:13px;font-weight:600;margin-bottom:8px;color:#334155}
+.sec-title .tag{display:inline-block;font-size:10.5px;color:var(--accent-strong);
+  background:var(--accent-soft);border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px}
+
+/* ===== 选择目录 ===== */
+.dir-box{display:flex;gap:10px;align-items:center}
+.btn{background:#fff;border:1px solid #cbd5e1;border-radius:9px;padding:8px 16px;
+  font-size:13.5px;color:var(--ink);transition:all .15s;font-weight:500}
+.btn:hover{border-color:var(--accent);color:var(--accent-strong)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--accent-strong);box-shadow:0 4px 12px rgba(14,165,233,.35)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.dir-path{flex:1;background:var(--code-bg);border:1px dashed #cbd5e1;border-radius:9px;
+  padding:8px 12px;color:var(--muted);font-size:13px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===== 标签 chips ===== */
+.tag-wrap{border:1px solid #cbd5e1;border-radius:9px;padding:6px;display:flex;flex-wrap:wrap;
+  gap:6px;background:#fff;transition:border-color .15s}
+.tag-wrap:focus-within{border-color:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);
+  border:1px solid var(--accent-line);color:#0369a1;border-radius:999px;
+  padding:2px 6px 2px 10px;font-size:12.5px}
+.chip button{border:0;background:none;color:#0369a1;font-size:14px;line-height:1;padding:0 4px}
+.chip button:hover{color:#dc2626}
+.tag-input{flex:1 1 120px;border:0;outline:none;padding:4px 6px;min-width:100px;background:none}
+.tag-suggest{margin-top:8px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;
+  gap:6px;align-items:center;max-height:150px;overflow-y:auto;padding-right:4px}
+.tag-suggest button{border:1px solid #dbe3ec;background:#fff;border-radius:999px;
+  padding:2px 10px;font-size:12px;color:#475569;transition:all .12s}
+.tag-suggest button:hover{border-color:var(--accent);color:var(--accent-strong)}
+.tag-suggest button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.tag-suggest .cap{width:100%;font-size:11px;color:#94a3b8;margin-bottom:2px}
+
+/* ===== 选项 ===== */
+.opt-row{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:13px;color:#334155;cursor:pointer}
+.opt-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.note{background:#f0f9ff;border:1px solid var(--accent-line);border-radius:10px;
+  padding:10px 12px;font-size:12.5px;color:#0369a1;margin-top:12px;line-height:1.8}
+
+/* ===== 结果区 ===== */
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.stat{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  transition:transform .15s}
+.stat:hover{transform:translateY(-1px)}
+.stat .num{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--ink);line-height:1.2}
+.stat .lab{font-size:12px;color:var(--muted);margin-top:3px}
+.stat.hl{background:linear-gradient(180deg,#f0f9ff,#fff)}
+.stat.hl .num{color:var(--accent-strong)}
+/* 「导出页数上限」卡片里的输入框：外观与其它统计数字一致，可编辑 */
+.stat .num input{display:block;width:100%;border:0;outline:none;background:transparent;
+  font:inherit;color:var(--accent-strong);padding:0 0 1px;cursor:text;
+  border-bottom:1px dashed var(--accent-line)}
+.stat .num input:focus{border-bottom-style:solid;border-bottom-color:var(--accent)}
+.stat .num input::-webkit-outer-spin-button,
+.stat .num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.stat .num input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.file-list{border:1px solid var(--line);border-radius:10px;overflow-y:auto;
+  max-height:calc(100vh - 340px);min-height:120px}
+.file-row{display:flex;align-items:center;gap:10px;padding:8px 14px;
+  border-bottom:1px solid #eef2f7;font-size:13px;transition:background .12s}
+.file-row:hover{background:#f8fafc}
+.file-row:last-child{border-bottom:0}
+.file-row .ic{flex:none;font-family:var(--mono);font-size:10px;color:#0369a1;
+  border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:5px;padding:1px 4px}
+.file-row .name{font-family:var(--mono);font-size:12.5px;flex:none;max-width:230px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.file-row .rel{color:var(--muted);font-size:12px;flex:1;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.file-row .cnt{color:var(--muted);font-size:12px;font-family:var(--mono);flex:none}
+.file-row .del-btn{flex:none;width:26px;height:26px;border:1px solid var(--line);background:#fff;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;
+  transition:all .15s;opacity:.45}
+.file-row .del-btn:hover{color:#dc2626;border-color:#fca5a5;background:#fef2f2;opacity:1}
+.file-row:hover .del-btn{opacity:1}
+.empty-tip{color:var(--muted);text-align:center;padding:28px 0;font-size:13px}
+
+/* ===== 底部生成 ===== */
+.app-footer{flex:none;background:#fff;border-top:1px solid var(--line);
+  padding:12px 24px;display:flex;align-items:center;gap:20px}
+.tpl-badge{display:flex;gap:9px;align-items:center;flex:none}
+.tpl-badge .lbl{font-size:13px;color:#334155;font-weight:600}
+.tpl-badge .chip-fixed{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+  color:var(--accent-strong);background:var(--accent-soft);border:1px solid var(--accent-line);
+  border-radius:10px;padding:7px 14px;user-select:none}
+.tpl-badge .sub{font-size:12px;color:var(--muted)}
+.footer-actions{margin-left:auto;display:flex;gap:10px}
+.footer-actions .btn{padding:9px 20px;border-radius:10px;font-weight:600}
+.gen-tip{flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:430px}
+.gen-tip b{color:var(--accent-strong)}
+
+/* ===== 模态弹框 ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9999;
+  display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;
+  pointer-events:none}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-card{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(15,23,42,.3);
+  max-width:440px;width:90%;overflow:hidden;transform:translateY(12px) scale(.97);
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.modal-overlay.show .modal-card{transform:translateY(0) scale(1)}
+.modal-head{padding:22px 24px 6px}
+.modal-head .icon{width:44px;height:44px;border-radius:12px;display:flex;
+  align-items:center;justify-content:center;margin-bottom:14px}
+.modal-head .icon.info{background:#e0f2fe;color:#0284c7}
+.modal-head .icon.warn{background:#fef3c7;color:#d97706}
+.modal-head .icon.error{background:#fee2e2;color:#dc2626}
+.modal-head .icon.success{background:#d1fae5;color:#059669}
+.modal-title{font-size:16px;font-weight:700;color:var(--ink)}
+.modal-body{padding:6px 24px 18px;font-size:14px;color:#475569;line-height:1.7}
+.modal-body .default-list{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;margin-top:10px}
+.modal-body .default-list .row{display:flex;justify-content:space-between;align-items:center;padding:5px 0}
+.modal-body .default-list .row + .row{border-top:1px solid #eef2f7}
+.modal-body .default-list .row .lbl{color:var(--muted);font-size:13px}
+.modal-body .default-list .row .val{font-weight:600;color:var(--ink);font-size:13px}
+.modal-foot{padding:0 24px 20px;display:flex;gap:10px;justify-content:flex-end}
+.modal-foot .btn{min-width:92px;justify-content:center;padding:9px 16px}
+
+/* ===== Toast 通知 ===== */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:10000;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(15,23,42,.2);
+  border:1px solid var(--line);padding:12px 18px;font-size:13.5px;color:var(--ink);
+  display:flex;align-items:center;gap:10px;max-width:420px;
+  transform:translateX(120%);opacity:0;transition:transform .35s cubic-bezier(.34,1.56,.64,1),opacity .25s;pointer-events:auto}
+.toast.show{transform:translateX(0);opacity:1}
+.toast .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.toast.info .dot{background:#0284c7}
+.toast.success .dot{background:var(--ok)}
+.toast.warn .dot{background:var(--warn)}
+.toast.error .dot{background:#ef4444}
+
+</style>
+</head>
+<body>
+
+<!-- ===== 顶栏 ===== -->
+<header class="app-header">
+  <div class="brand">
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 6l-10 7L2 6"/><path d="M2 6h20"/><path d="M2 6v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6"/></svg>
+    </div>
+    <div class="tt">
+      <b>软著代码过滤器</b>
+      <span>本地处理 · 不上传任何代码</span>
+    </div>
+  </div>
+  <div class="soft-info">
+    <div class="field w5"><label>系统名称</label><input id="inp-name" placeholder="如：数字化乡村后台管理系统"></div>
+    <div class="field w2"><label>版本号</label><input id="inp-ver" placeholder="V1.0"></div>
+    <div class="field w3"><label>封面署名</label><input id="inp-org" placeholder="编制单位 / 著作权人（可选）"></div>
+    <div class="field w2"><label>日期</label><input id="inp-date" placeholder="2026.09"></div>
+
+  </div>
+</header>
+
+<!-- ===== 主区 ===== -->
+<main class="app-main">
+  <!-- 左：选择与过滤（独立滚动） -->
+  <section class="panel">
+    <h2><span class="step">1</span>选择项目目录</h2>
+    <div class="dir-box">
+      <input type="file" id="dir-input" webkitdirectory directory multiple class="hidden">
+      <button class="btn primary" id="btn-dir">选择目录</button>
+      <div class="dir-path" id="dir-path">尚未选择目录</div>
+    </div>
+    <p class="hint">选择后浏览器将枚举该目录全部文件，仅在本地处理。</p>
+
+    <div class="sec">
+      <div class="sec-title">保留的文件类型<span class="tag">不选 = 全部</span></div>
+      <div class="tag-wrap" id="wrap-include"></div>
+      <div class="tag-suggest" id="suggest-include"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">排除的文件类型<span class="tag">选择保留的文件类型后可忽略</span></div>
+      <div class="tag-wrap" id="wrap-exclude"></div>
+      <div class="tag-suggest" id="suggest-exclude"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">排除的文件夹<span class="tag">内置常见目录</span></div>
+      <div class="tag-wrap" id="wrap-exdir"></div>
+      <div class="tag-suggest" id="suggest-exdir"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">排除的文件名<span class="tag">如 __init__.py</span></div>
+      <div class="tag-wrap" id="wrap-exnames"></div>
+      <div class="tag-suggest" id="suggest-exnames"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">仅保留这些文件夹<span class="tag">优先级最高</span></div>
+      <div class="tag-wrap" id="wrap-onlydir"></div>
+      <div class="tag-suggest" id="suggest-onlydir"><span class="cap">选择目录后，这里会自动列出该目录下的全部文件夹，点击即可筛选</span></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">代码处理</div>
+      <label class="opt-row"><input type="checkbox" id="opt-drop-empty" checked> 删除空行（软著材料惯例：不留空行）</label>
+      <label class="opt-row"><input type="checkbox" id="opt-strip" checked> 剥离全部注释（按语言识别）</label>
+    </div>
+
+    <div class="note">
+      过滤规则 = 文件类型白名单 ∩ 非排除类型 ∩ 目录规则。「仅保留文件夹」优先于「排除文件夹」：文件命中任一所选文件夹即保留。文件按路径自然排序依次拼接，读完 A 文件读 B 文件。
+    </div>
+  </section>
+
+  <!-- 右：结果（独立滚动） -->
+  <section class="panel">
+    <h2><span class="step">2</span>扫描结果与入选文件
+      <button class="rescan-btn" id="btn-rescan" title="重新加载文件列表（恢复已删除的文件）">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        重新扫描
+      </button>
+    </h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="st-total">0</div><div class="lab">扫描文件总数</div></div>
+      <div class="stat"><div class="num" id="st-keep">0</div><div class="lab">入选文件数</div></div>
+      <div class="stat hl"><div class="num" id="st-lines">0</div><div class="lab">代码行（去注释空行）</div></div>
+      <div class="stat hl"><div class="num" id="st-pages" title="目录内可导出的代码页总数（50 行/页，封面不计入）">0</div><div class="lab">代码页数</div></div>
+      <div class="stat hl"><div class="num"><input id="inp-pages" type="number" min="1" max="9999" step="1" value="60" title="只导出前 N 页代码，超出部分丢弃（封面不计入）。默认 60 页"></div><div class="lab">导出页数上限</div></div>
+    </div>
+    <div class="file-list" id="file-list"></div>
+  </section>
+</main>
+
+<!-- ===== 底部：生成 ===== -->
+<footer class="app-footer">
+  <div class="tpl-badge">
+    <span class="lbl">输出模板</span>
+    <span class="chip-fixed">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+      工具模板
+    </span>
+    <span class="sub">全部代码 · 50 行/页</span>
+  </div>
+  <div class="gen-tip" id="gen-tip"></div>
+  <div class="footer-actions">
+    <button class="btn primary" id="btn-docx">生成并下载 DOCX</button>
+  </div>
+</footer>
+<div class="toast-container"></div>
+
+<script>
+"use strict";
+/* ============================================================
+ * 常量与配置
+ * ============================================================ */
+var PER_PAGE = 50;                 // 每页行数
+var MAX_TEXT = 4 * 1024 * 1024;    // 单文件读取上限
+
+/* ===== 代码页排版参数（保证每页恰好 50 行） =====
+ * A4 正文可用高度 = 841.9pt - 上边距72pt - 下边距72pt = 697.9pt = 13958 twips
+ * 长代码行会折行，占掉额外行高，因此行距必须按实际折行量动态计算，
+ * 否则 50 行会溢出到下一页（实测每页只能排 32 行）。 */
+var BODY_HEIGHT_TWIPS = 13958;     // 正文可用高度(twips)
+var TEMPLATE_LINE_TWIPS = 274;     // 模板基准行距 13.7pt（上限）
+var MIN_LINE_TWIPS = 200;          // 行距下限 10pt（极端折行时的兜底）
+var SAFETY = 0.98;                 // 安全余量：抵消 Word 行高取整误差
+var CODE_LINE_TWIPS = 264;         // 当前实际行距，由 layoutCode() 计算
+var CODE_TEXT_WIDTH_PT = 415.6;    // 代码文本可用宽度 = 正文宽度（行号在页边距内，不占正文宽）
+
+/* 语言 → 注释规则（覆盖主流编程语言注释语法） */
+var LANG_PROFILES = {
+  c:        { line: ["//"],              block: [["/*", "*/"]],                        str: ['"', "'"],  esc: "\\" },
+  python:   { line: ["#"],               block: [],                                    str: ['"', "'", '"""', "'''"], esc: "\\" },
+  html:     { line: [],                  block: [["<!--", "-->"]],                     str: [],          esc: null },
+  sql:      { line: ["--", "#"],         block: [["/*", "*/"]],                        str: ["'", '"'],  esc: "\\" },
+  shell:    { line: ["#"],               block: [],                                    str: ['"', "'"],  esc: "\\" },
+  lua:      { line: ["--"],              block: [["--[[", "]]"]],                      str: ['"', "'"],  esc: "\\" },
+  pascal:   { line: ["//"],              block: [["{", "}"], ["(*", "*)"]],            str: ["'"],       esc: "'" },
+  haskell:  { line: ["--"],              block: [["{-", "-}"]],                        str: ['"', "'"],  esc: "\\" },
+  ocaml:    { line: [],                  block: [["(*", "*)"]],                        str: ['"', "'"],  esc: "\\" },
+  vb:       { line: ["'", "REM"],        block: [],                                    str: ['"'],       esc: null },
+  batch:    { line: ["REM", "::"],       block: [],                                    str: [],          esc: null },
+  powershell:{ line: ["#"],              block: [["<#", "#>"]],                        str: ['"', "'"],  esc: "`" },
+  tex:      { line: ["%"],               block: [],                                    str: [],          esc: null },
+  css:      { line: [],                  block: [["/*", "*/"]],                        str: [],          esc: null },
+  plain:    { line: [],                  block: [],                                    str: [],          esc: null }
+};
+
+/* 扩展名 → 语言规则（.m 默认按 C 系处理） */
+var EXT_PROFILE = {
+  py:"python", java:"c", c:"c", h:"c", cpp:"c", hpp:"c", cc:"c", cxx:"c", cs:"c",
+  js:"c", jsx:"c", ts:"c", tsx:"c", go:"c", rs:"c", swift:"c", kt:"c", kts:"c",
+  php:"c", dart:"c", scala:"c", groovy:"c", m:"c", mm:"c",
+  html:"html", htm:"html", xml:"html", svg:"html", vue:"html", xhtml:"html",
+  css:"css", scss:"c", less:"c", sass:"c",
+  sql:"sql", sh:"shell", bash:"shell", zsh:"shell", rb:"shell", pl:"shell",
+  yml:"shell", yaml:"shell", toml:"shell", ini:"shell", cfg:"shell", conf:"shell",
+  properties:"shell", mk:"shell", gradle:"shell",
+  lua:"lua", pas:"pascal", pp:"pascal", hs:"haskell", ml:"ocaml", mli:"ocaml",
+  vb:"vb", vbs:"vb", bas:"vb", bat:"batch", cmd:"batch", ps1:"powershell",
+  tex:"tex", md:"plain", json:"plain", txt:"plain"
+};
+
+var ALL_EXTS = ["py","java","c","h","cpp","hpp","cc","cxx","cs","js","jsx","ts","tsx",
+  "go","rs","swift","kt","kts","php","dart","scala","groovy","m","mm","html","htm",
+  "xml","svg","vue","css","scss","less","sass","sql","sh","bash","zsh","rb","pl",
+  "yml","yaml","toml","ini","cfg","conf","properties","mk","gradle","lua","pas",
+  "pp","hs","ml","mli","vb","vbs","bas","bat","cmd","ps1","tex","md","json","txt"];
+
+/* 文件名 → 语言（无扩展名/特殊命名文件） */
+var NAME_PROFILES = {
+  "makefile": "shell", "gnumakefile": "shell", "dockerfile": "shell", "containerfile": "shell",
+  "jenkinsfile": "shell", "rakefile": "shell", "gemfile": "shell", "brewfile": "shell",
+  ".bashrc": "shell", ".bash_profile": "shell", ".profile": "shell", ".zshrc": "shell",
+  ".cshrc": "shell", ".gitconfig": "plain", ".gitignore": "plain", ".gitattributes": "plain",
+  ".editorconfig": "plain", ".npmrc": "plain", ".yarnrc": "plain", ".prettierrc": "plain",
+  ".eslintrc": "plain", "cmakelists.txt": "shell", "meson.build": "plain",
+  "gradlew": "shell", "mvnw": "shell", "pom.xml": "xml", "build.gradle": "shell"
+};
+/* 模板后缀：去掉后按真实扩展名识别（如 .git 的 applypatch-msg.sample 实为 shell） */
+var TEMPLATE_SUFFIXES = /\.(sample|example|template|tpl|in|dist|orig|bak|old|new|disabled|default)$/i;
+
+/* 为文件选择注释规则：扩展名 → 文件名 → shebang → 剥模板后缀 → 内容启发式 → 纯文本 */
+function detectProfile(entry, firstLines) {
+  var extP = EXT_PROFILE[entry.ext];
+  if (extP) return LANG_PROFILES[extP];
+  var base = entry.name.toLowerCase();
+  if (NAME_PROFILES[base]) return LANG_PROFILES[NAME_PROFILES[base]];
+  if (firstLines && firstLines.length && firstLines[0].indexOf("#!") === 0) {
+    var l = firstLines[0].toLowerCase();
+    if (l.indexOf("python") >= 0) return LANG_PROFILES.python;
+    if (l.indexOf("lua") >= 0) return LANG_PROFILES.lua;
+    if (l.indexOf("node") >= 0) return LANG_PROFILES.c;
+    return LANG_PROFILES.shell; // sh/bash/zsh/ruby/perl 等默认按 shell
+  }
+  var stripped = entry.name.replace(TEMPLATE_SUFFIXES, "");
+  var dot = stripped.lastIndexOf(".");
+  var ext2 = dot > 0 ? stripped.slice(dot + 1).toLowerCase() : "";
+  if (ext2 && ext2 !== entry.ext && EXT_PROFILE[ext2]) return LANG_PROFILES[EXT_PROFILE[ext2]];
+  if (firstLines) {
+    var hash = 0, sl = 0, blk = 0;
+    for (var i = 0; i < Math.min(firstLines.length, 25); i++) {
+      var s = firstLines[i].trim();
+      if (s.indexOf("#") === 0) hash++;
+      else if (s.indexOf("//") === 0) sl++;
+      else if (s.indexOf("/*") === 0) blk++;
+    }
+    if (hash >= 2) return LANG_PROFILES.shell;
+    if (sl >= 1 || blk >= 1) return LANG_PROFILES.c;
+  }
+  return LANG_PROFILES.plain;
+}
+
+var DEFAULT_EXCLUDE_DIRS = ["node_modules","__pycache__",".git",".idea",".vscode",
+  "dist","build","target","venv",".venv","env",".env","__MACOSX",".svn",".hg",
+  "coverage",".next",".nuxt","out","bin","obj","logs","tmp",".cache",
+  ".pytest_cache",".mypy_cache",".gradle",".settings","egg-info",".tox","htmlcov"];
+
+var COMMON_EXCLUDE_DIRS = ["node_modules","__pycache__",".git",".idea",".vscode",
+  "dist","build","target","venv",".venv","__MACOSX",".svn",".hg","coverage",
+  ".next",".nuxt","out","bin","obj","logs","tmp",".cache",".pytest_cache",".gradle"];
+
+/* ============================================================
+ * 状态
+ * ============================================================ */
+var state = {
+  entries: [],          // [{relPath,name,ext,size,file}]
+  textCache: {},        // relPath -> text
+  includeTypes: [],     // [] 表示全部
+  excludeTypes: [],
+  excludeNames: [],     // 按文件名排除（小写、精确匹配），如 __init__.py
+  excludeDirs: DEFAULT_EXCLUDE_DIRS.slice(),
+  onlyDirs: [],
+  dropEmpty: true,
+  strip: true,
+  deletedPaths: new Set(), // 用户手动删除的文件 relPath 集合
+  rootName: ""          // 已加载的目录名（供重新扫描时显示）
+};
+
+
+
+/* ============================================================
+ * DOM 引用
+ * ============================================================ */
+var $ = function (id) { return document.getElementById(id); };
+
+/* ============================================================
+ * 弹框与通知系统
+ * ============================================================ */
+var MODAL_ICONS = {
+  info: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  warn: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  error: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></svg>',
+  success: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>'
+};
+function showModal(opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    var iconType = opts.icon || "info";
+    var bodyHtml = "";
+    if (opts.message) bodyHtml += '<div>' + opts.message + '</div>';
+    if (opts.defaults && opts.defaults.length) {
+      bodyHtml += '<div class="default-list">';
+      opts.defaults.forEach(function (d) {
+        bodyHtml += '<div class="row"><span class="lbl">' + d.label + '</span><span class="val">' + escHtml(d.value) + '</span></div>';
+      });
+      bodyHtml += '</div>';
+    }
+    var btns = opts.buttons || [{ text: "确定", value: true, primary: true }];
+    var btnHtml = btns.map(function (b) {
+      var cls = "btn" + (b.primary ? " primary" : "");
+      return '<button type="button" class="' + cls + '">' + b.text + '</button>';
+    }).join("");
+    ov.innerHTML = '<div class="modal-card">' +
+      '<div class="modal-head"><div class="icon ' + iconType + '">' + (MODAL_ICONS[iconType] || MODAL_ICONS.info) + '</div>' +
+      (opts.title ? '<div class="modal-title">' + opts.title + '</div>' : '') + '</div>' +
+      '<div class="modal-body">' + bodyHtml + '</div>' +
+      '<div class="modal-foot">' + btnHtml + '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add("show"); });
+    function close(val) {
+      ov.classList.remove("show");
+      setTimeout(function () { ov.remove(); resolve(val); }, 250);
+    }
+    ov.querySelectorAll(".modal-foot .btn").forEach(function (btn, i) {
+      btn.addEventListener("click", function () { close(btns[i].value); });
+    });
+    ov.addEventListener("click", function (e) { if (e.target === ov) close(null); });
+    document.addEventListener("keydown", function esc(e) {
+      if (e.key === "Escape") { document.removeEventListener("keydown", esc); close(null); }
+    });
+  });
+}
+function showToast(message, type) {
+  type = type || "info";
+  var container = document.querySelector(".toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+  var t = document.createElement("div");
+  t.className = "toast " + type;
+  t.innerHTML = '<span class="dot"></span><span>' + escHtml(message) + '</span>';
+  container.appendChild(t);
+  requestAnimationFrame(function () { t.classList.add("show"); });
+  setTimeout(function () {
+    t.classList.remove("show");
+    setTimeout(function () { t.remove(); }, 350);
+  }, 3500);
+}
+function showInfo(message, title) {
+  return showModal({ title: title || "提示", message: message, icon: "info",
+    buttons: [{ text: "确定", value: true, primary: true }] });
+}
+function showWarn(message, title) {
+  return showModal({ title: title || "注意", message: message, icon: "warn",
+    buttons: [{ text: "确定", value: true, primary: true }] });
+}
+
+/* ============================================================
+ * 标签 chips 组件（支持动态建议列表）
+ * ============================================================ */
+function makeTagBox(wrapId, suggestId, list, opts) {
+  opts = opts || {};
+  var wrap = $(wrapId), suggest = $(suggestId);
+  var input = document.createElement("input");
+  input.className = "tag-input";
+  input.placeholder = opts.placeholder || "输入后回车添加";
+  wrap.appendChild(input);
+
+  function renderSuggest() {
+    suggest.innerHTML = "";
+    var arr = opts.suggestions || [];
+    if (!arr.length) return;
+    arr.forEach(function (item) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = item;
+      b.className = list.indexOf(item) >= 0 ? "on" : "";
+      b.title = item;
+      b.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      b.addEventListener("click", function () {
+        toggleItem(item);
+      });
+      suggest.appendChild(b);
+    });
+  }
+  function renderChips() {
+    wrap.querySelectorAll(".chip").forEach(function (c) { c.remove(); });
+    list.forEach(function (item) {
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      var t = document.createElement("span");
+      t.textContent = item;
+      var x = document.createElement("button");
+      x.type = "button";
+      x.textContent = "\u00d7";
+      x.title = "移除";
+      x.addEventListener("click", function () { removeItem(item); });
+      chip.appendChild(t); chip.appendChild(x);
+      wrap.insertBefore(chip, input);
+    });
+    renderSuggest();
+    onStateChange();
+  }
+  function addItem(v) {
+    v = (v || "").trim().replace(/^\./, "").toLowerCase();
+    if (!v) return;
+    if (list.indexOf(v) < 0) list.push(v);
+    renderChips();
+  }
+  function removeItem(v) {
+    var i = list.indexOf(v);
+    if (i >= 0) list.splice(i, 1);
+    renderChips();
+  }
+  function toggleItem(v) {
+    if (list.indexOf(v) >= 0) removeItem(v); else addItem(v);
+  }
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); addItem(input.value); input.value = ""; }
+  });
+  input.addEventListener("blur", function () {
+    if (input.value.trim()) { addItem(input.value); input.value = ""; }
+  });
+  renderChips();
+  return {
+    setSuggestions: function (arr) { opts.suggestions = arr; renderSuggest(); },
+    setCaption: function (text) {
+      var cap = suggest.querySelector(".cap");
+      if (cap) cap.textContent = text;
+    }
+  };
+}
+
+/* ============================================================
+ * 目录选择（优先使用 File System Access API，避免浏览器原生上传弹框）
+ * ============================================================ */
+var dirHandle = null; /* showDirectoryPicker 返回的目录句柄 */
+
+async function readDirRecursive(handle, prefix) {
+  var entries = [];
+  for await (var entry of handle.values()) {
+    var path = prefix ? prefix + "/" + entry.name : entry.name;
+    if (entry.kind === "file") {
+      entries.push({ handle: entry, relPath: path, name: entry.name,
+        ext: getExt(entry.name), size: 0, file: null });
+    } else if (entry.kind === "directory") {
+      var sub = await readDirRecursive(entry, path);
+      entries = entries.concat(sub);
+    }
+  }
+  return entries;
+}
+function getExt(name) {
+  var dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+$("btn-dir").addEventListener("click", async function () {
+  if (window.showDirectoryPicker) {
+    try {
+      dirHandle = await window.showDirectoryPicker();
+      var rawEntries = await readDirRecursive(dirHandle, "");
+      /* 获取每个文件的实际 File 对象（用于读取内容和获取大小） */
+      var entries = [];
+      for (var i = 0; i < rawEntries.length; i++) {
+        try {
+          var file = await rawEntries[i].handle.getFile();
+          entries.push({
+            relPath: rawEntries[i].relPath,
+            name: rawEntries[i].name,
+            ext: rawEntries[i].ext,
+            size: file.size,
+            file: file
+          });
+        } catch (e) { /* 跳过无法读取的文件 */ }
+      }
+      entries.sort(function (a, b) {
+        return a.relPath.localeCompare(b.relPath, "zh-Hans-CN", { numeric: true });
+      });
+      handleDirEntries(entries, dirHandle.name);
+      showToast("已加载目录「" + dirHandle.name + "」，共 " + entries.length + " 个文件", "success");
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      showToast("选择目录失败", "error");
+    }
+  } else {
+    /* 不支持 File System Access API 的浏览器，回退到原生 input */
+    $("dir-input").click();
+  }
+});
+
+/* 统一处理目录选后的 entries，更新状态和 UI */
+function handleDirEntries(entries, rootName) {
+  state.entries = entries;
+  state.textCache = {};
+  state.deletedPaths = new Set();
+  state.rootName = rootName;
+  /* 动态列出所选目录下的全部文件夹名（去重），供「仅保留」点击筛选 */
+  var dirs = collectDirs(entries);
+  onlyDirBox.setSuggestions(dirs);
+  onlyDirBox.setCaption("该目录下共 " + dirs.length + " 个文件夹，点击筛选（高亮 = 已选中）");
+  /* 列出全部文件名，供「排除的文件名」点击筛选 */
+  excludeNameBox.setSuggestions(collectNames(entries));
+  onStateChange();
+}
+
+/* 提取所选目录下出现过的全部文件名（小写去重），供「排除的文件名」点击筛选 */
+function collectNames(entries) {
+  var seen = new Set();
+  entries.forEach(function (en) { seen.add(String(en.name).toLowerCase()); });
+  return Array.from(seen).sort(function (a, b) { return a.localeCompare(b, "en"); });
+}
+
+/* 不支持 File System Access API 时的回退 */
+$("dir-input").addEventListener("change", function (e) {
+  var files = Array.prototype.slice.call(e.target.files || []);
+  var entries = [];
+  files.forEach(function (f) {
+    var rel = f.webkitRelativePath || f.name;
+    var parts = rel.split("/");
+    var name = parts[parts.length - 1];
+    var dot = name.lastIndexOf(".");
+    var ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+    entries.push({ relPath: rel, name: name, ext: ext, size: f.size, file: f });
+  });
+  var rootName = files.length ? files[0].webkitRelativePath.split("/")[0] : "目录";
+  handleDirEntries(entries, rootName);
+});
+
+/* 重新扫描：基于已保存的 dirHandle 重新加载文件列表（恢复用户删除的文件） */
+$("btn-rescan").addEventListener("click", async function () {
+  if (!state.entries.length && !dirHandle) {
+    showToast("请先选择目录", "warn");
+    return;
+  }
+  if (dirHandle) {
+    /* File System Access API：静默重新读取目录 */
+    try {
+      var rawEntries = await readDirRecursive(dirHandle, "");
+      var entries = [];
+      for (var i = 0; i < rawEntries.length; i++) {
+        try {
+          var file = await rawEntries[i].handle.getFile();
+          entries.push({
+            relPath: rawEntries[i].relPath,
+            name: rawEntries[i].name,
+            ext: rawEntries[i].ext,
+            size: file.size,
+            file: file
+          });
+        } catch (e) { /* 跳过无法读取的文件 */ }
+      }
+      entries.sort(function (a, b) {
+        return a.relPath.localeCompare(b.relPath, "zh-Hans-CN", { numeric: true });
+      });
+      handleDirEntries(entries, dirHandle.name);
+      showToast("已重新扫描，共 " + entries.length + " 个文件", "success");
+    } catch (e) {
+      showToast("重新扫描失败", "error");
+    }
+  } else {
+    /* 回退方案：重新触发文件选择 */
+    $("dir-input").click();
+  }
+});
+
+/* 提取所选目录下出现过的全部文件夹名（所有层级，去重排序） */
+function collectDirs(entries) {
+  var seen = new Set();
+  entries.forEach(function (en) {
+    var parts = en.relPath.split("/");
+    parts.pop();
+    parts.forEach(function (p) { if (p) seen.add(p); });
+  });
+  return Array.from(seen).sort(function (a, b) {
+    return a.localeCompare(b, "zh-Hans-CN", { numeric: true });
+  });
+}
+
+/* ============================================================
+ * 过滤
+ * ============================================================ */
+function inDirs(relPath, dirs) {
+  var parts = relPath.split("/");
+  parts.pop();
+  return parts.some(function (p) { return dirs.indexOf(p) >= 0; });
+}
+function getSelected() {
+  var hasInclude = state.includeTypes.length > 0;
+  return state.entries.filter(function (en) {
+    if (state.deletedPaths.has(en.relPath)) return false;
+    if (hasInclude && state.includeTypes.indexOf(en.ext) < 0) return false;
+    if (state.excludeTypes.indexOf(en.ext) >= 0) return false;
+    if (state.excludeNames.length > 0 &&
+        state.excludeNames.indexOf(String(en.name).toLowerCase()) >= 0) return false;
+    if (state.onlyDirs.length > 0) return inDirs(en.relPath, state.onlyDirs);
+    return !inDirs(en.relPath, state.excludeDirs);
+  }).sort(function (a, b) {
+    return a.relPath.localeCompare(b.relPath, "zh-Hans-CN", { numeric: true });
+  });
+}
+
+/* ============================================================
+ * 注释剥离（词法状态机，覆盖全部配置语言）
+ * ============================================================ */
+function stripComments(code, profile) {
+  if (!profile || (!profile.line.length && !profile.block.length)) return code;
+  var lineMarks = profile.line.slice().sort(function (a, b) { return b.length - a.length; });
+  var blockMarks = profile.block.slice().sort(function (a, b) { return (b[0].length + b[1].length) - (a[0].length + a[1].length); });
+  var strMarks = (profile.str || []).slice().sort(function (a, b) { return b.length - a.length; });
+  var esc = profile.esc || null;
+  var out = [];
+  var i = 0, n = code.length;
+  var state = "normal";
+  var curStr = null;
+
+  function matchAt(arr, pos) {
+    for (var k = 0; k < arr.length; k++) {
+      var m = arr[k];
+      if (typeof m === "string") {
+        if (code.substr(pos, m.length) === m) return m;
+      } else {
+        if (code.substr(pos, m[0].length) === m[0]) return m;
+      }
+    }
+    return null;
+  }
+  var blockStarts = blockMarks.map(function (b) { return b; });
+  while (i < n) {
+    var ch = code[i];
+    if (state === "normal") {
+      var bm = matchAt(blockStarts, i);
+      var lm = matchAt(lineMarks, i);
+      if (bm && (!lm || bm[0].length > lm.length)) {
+        i += bm[0].length;
+        var end = bm[1];
+        while (i < n) {
+          if (code.substr(i, end.length) === end) { i += end.length; break; }
+          if (code[i] === "\n") out.push("\n");
+          i++;
+        }
+        continue;
+      }
+      if (lm) {
+        /* 保留 shebang 行：行首 #! 是脚本声明，不是注释 */
+        var isShebang = lm === "#" && code[i + 1] === "!" && (i === 0 || code[i - 1] === "\n");
+        if (!isShebang) {
+          while (i < n && code[i] !== "\n") i++;
+          continue;
+        }
+      }
+      var sm = matchAt(strMarks, i);
+      if (sm) {
+        curStr = sm; state = "string";
+        out.push(sm); i += sm.length;
+        continue;
+      }
+      out.push(ch); i++;
+    } else { // string
+      if (esc && code[i] === esc) {
+        out.push(code[i]);
+        if (i + 1 < n) { out.push(code[i + 1]); i += 2; } else i++;
+        continue;
+      }
+      if (curStr && curStr.length > 1 && code.substr(i, curStr.length) === curStr) {
+        out.push(curStr); i += curStr.length; state = "normal"; curStr = null;
+        continue;
+      }
+      if (curStr && curStr.length === 1 && code[i] === curStr) {
+        if (esc === null && code[i + 1] === curStr) {
+          out.push(curStr + curStr); i += 2; continue;
+        }
+        out.push(curStr); i++; state = "normal"; curStr = null;
+        continue;
+      }
+      out.push(ch); i++;
+    }
+  }
+  return out.join("");
+}
+
+/* 逐行清洗：去尾空白 */
+function cleanLine(s) {
+  return s.replace(/\s+$/, "");
+}
+
+/* Python docstring 剥离：独立成行的 """...""" / '''...'''（模块/函数/类文档字符串）
+ * 赋值、print("""..""") 等表达式保留；多行 docstring 整块删除 */
+function stripPythonDocstrings(code) {
+  var lines = code.split("\n");
+  var out = [];
+  var inDoc = null;
+  for (var i = 0; i < lines.length; i++) {
+    var raw = lines[i];
+    if (inDoc) {
+      if (raw.indexOf(inDoc) >= 0) inDoc = null;
+      continue;
+    }
+    var t = raw.trim();
+    var isDoc = false;
+    var marks = ['"""', "'''"];
+    for (var m = 0; m < marks.length; m++) {
+      var q = marks[m];
+      if (t.indexOf(q) === 0) {
+        var body = t.slice(q.length);
+        var c = body.indexOf(q);
+        if (c >= 0) {
+          var tail = body.slice(c + q.length).trim();
+          if (!tail) isDoc = true;   // 独立成行的单行 docstring
+        } else {
+          isDoc = true;              // 多行 docstring 开头
+          inDoc = q;
+        }
+        break;
+      }
+    }
+    out.push(isDoc ? "" : raw);
+  }
+  return out.join("\n");
+}
+
+/* 显示宽度：全角/中文按 2，半角按 1 */
+function dispWidth(s) {
+  var w = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    w += (c > 255) ? 2 : 1;
+  }
+  return w;
+}
+/* 超长行截断：按显示宽度不超过 MAX_CODE_W（9pt 宋体一页宽度内）
+ * 行号由 Word 的自动行号画在左侧页边距内，不占正文宽度，
+ * 故可用宽度 = 正文宽 8312twips = 415.6pt。
+ * 9pt 宋体半角字符宽 4.5pt(90twips) → 理论上限 415.6/4.5 = 92.3 个半角字符，取 91 留余量。
+ * 一旦折行，每折一行就多吃一行行高，导致 50 行放不下、行距被迫压缩。 */
+var MAX_CODE_W = 91;
+function truncateLine(s) {
+  var w = 0;
+  for (var i = 0; i < s.length; i++) {
+    var cw = (s.charCodeAt(i) > 255) ? 2 : 1;
+    if (w + cw > MAX_CODE_W) return s.slice(0, i);
+    w += cw;
+  }
+  return s;
+}
+
+/* ============================================================
+ * 构建代码行（入选文件 → 去注释 → 去空行 → 拼接）
+ * ============================================================ */
+async function buildLines(selected) {
+  var lines = [];
+  var skipped = [];
+  var truncatedCount = 0;
+  var binaryCount = 0;
+  for (var idx = 0; idx < selected.length; idx++) {
+    var en = selected[idx];
+    if (en.size > MAX_TEXT) { skipped.push(en.relPath + "（>4MB 已跳过）"); continue; }
+    var text = state.textCache[en.relPath];
+    if (text === undefined) {
+      try {
+        text = await en.file.text();
+      } catch (err) {
+        skipped.push(en.relPath + "（读取失败）");
+        continue;
+      }
+      if (text.indexOf("\u0000") >= 0) {
+        /* 读到 NUL：要么真是二进制，要么是透明加密软件（亿赛通 E-SafeNet 等）
+         * 给非白名单进程返回的密文——浏览器不在白名单里，只能读到密文。 */
+        binaryCount++;
+        skipped.push(en.relPath + "（二进制/密文已跳过）");
+        continue;
+      }
+      state.textCache[en.relPath] = text;
+    }
+    var cleaned = text;
+    if (state.strip) {
+      var firstLines = text.split("\n").slice(0, 25);
+      var profile = detectProfile(en, firstLines);
+      if (profile === LANG_PROFILES.python) cleaned = stripPythonDocstrings(text);
+      cleaned = stripComments(cleaned, profile);
+    }
+    var fileLines = cleaned.split("\n");
+    for (var j = 0; j < fileLines.length; j++) {
+      var ln = cleanLine(fileLines[j]);
+      if (state.dropEmpty && !ln.trim()) continue;
+      var tl = truncateLine(ln);
+      if (tl.length < ln.length) truncatedCount++;
+      lines.push(tl);
+    }
+  }
+  return { lines: lines, skipped: skipped, truncated: truncatedCount, binary: binaryCount };
+}
+
+/* ============================================================
+ * 分页
+ * ============================================================ */
+function paginate(lines) {
+  var pages = [];
+  for (var i = 0; i < lines.length; i += PER_PAGE) pages.push(lines.slice(i, i + PER_PAGE));
+  return pages;
+}
+/* 导出页数上限（默认 60），封面（第 1 页系统信息）不计入 */
+var DEFAULT_PAGES = 60;
+function getPageLimit() {
+  var v = parseInt($("inp-pages").value, 10);
+  if (!isFinite(v) || v < 1) return DEFAULT_PAGES;
+  return Math.min(v, 9999);
+}
+/* 只取前 limit 页，超出的部分直接丢弃 */
+function pagesForTemplate(pages) {
+  return pages.slice(0, getPageLimit());
+}
+
+/* ============================================================
+ * DOCX 生成（零依赖：OOXML + ZIP STORE + CRC32）
+ * ============================================================ */
+var CRC_TABLE = (function () {
+  var t = new Uint32Array(256);
+  for (var n = 0; n < 256; n++) {
+    var c = n;
+    for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  var c = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function utf8Bytes(str) { return new TextEncoder().encode(str); }
+function u16(v) { return new Uint8Array([v & 255, (v >> 8) & 255]); }
+function u32(v) { return new Uint8Array([v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255]); }
+function concatBytes(arrs) {
+  var len = 0;
+  arrs.forEach(function (a) { len += a.length; });
+  var out = new Uint8Array(len);
+  var off = 0;
+  arrs.forEach(function (a) { out.set(a, off); off += a.length; });
+  return out;
+}
+/* ZIP（STORE 无压缩） */
+function makeZip(entries) {
+  var parts = [], central = [];
+  var offset = 0;
+  entries.forEach(function (e) {
+    var nameB = utf8Bytes(e.name);
+    var crc = crc32(e.data);
+    var lh = concatBytes([
+      u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(e.data.length), u32(e.data.length), u16(nameB.length), u16(0)
+    ]);
+    parts.push(lh, nameB, e.data);
+    central.push({ nameB: nameB, crc: crc, size: e.data.length, offset: offset });
+    offset += lh.length + nameB.length + e.data.length;
+  });
+  var cdStart = offset;
+  var cdParts = [];
+  central.forEach(function (c) {
+    var h = concatBytes([
+      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(c.crc), u32(c.size), u32(c.size),
+      u16(c.nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.offset)
+    ]);
+    cdParts.push(h, c.nameB);
+  });
+  var cd = concatBytes(cdParts);
+  var cdLen = cd.length;
+  var eocd = concatBytes([
+    u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length),
+    u32(cdLen), u32(cdStart), u16(0)
+  ]);
+  return concatBytes(parts.concat([cd, eocd]));
+}
+function escXml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function xmlDecl() { return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'; }
+
+function runProps(pr) {
+  return '<w:rPr><w:rFonts w:ascii="' + pr.f + '" w:eastAsia="' + pr.f + '" w:hAnsi="' + pr.f + '"/><w:sz w:val="' + pr.sz + '"/></w:rPr>';
+}
+function run(text, pr, extra) {
+  extra = extra || "";
+  return '<w:r>' + runProps(pr) + extra + '<w:t xml:space="preserve">' + escXml(text) + '</w:t></w:r>';
+}
+function para(runs, ppr) {
+  return '<w:p>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : "") + runs + '</w:p>';
+}
+
+/* ===== 折行度量：用 canvas 以 9pt 宋体测量一行代码的实际宽度 ===== */
+var _measureCtx = null;
+function measureRows(text) {
+  var s = String(text == null ? "" : text);
+  if (s === "") return 1;
+  if (_measureCtx === null) {
+    try {
+      var cv = document.createElement("canvas");
+      _measureCtx = cv.getContext("2d");
+      _measureCtx.font = "12px SimSun,\"宋体\",serif";   // 9pt @96dpi = 12px
+    } catch (e) { _measureCtx = false; }
+  }
+  if (!_measureCtx) {
+    /* 回退估算：半角 4.5pt / 全角 9pt */
+    var wpt = 0;
+    for (var i = 0; i < s.length; i++) wpt += (s.charCodeAt(i) > 0x2E7F ? 9 : 4.5);
+    return Math.max(1, Math.ceil(wpt / CODE_TEXT_WIDTH_PT));
+  }
+  var availPx = CODE_TEXT_WIDTH_PT * 96 / 72;
+  var wPx = _measureCtx.measureText(s).width;
+  var rows = Math.ceil(wPx / availPx);
+  return rows > 0 ? rows : 1;
+}
+
+/* ===== 动态计算代码行距 =====
+ * 统计所有页中「折行后总行数」的最大值 R，取 行距 = 正文高度×安全系数 / R，
+ * 上限为模板的 13.7pt，下限 10pt。
+ * 无折行时 R=50 → 行距约 13.65pt，页面自然填满（贴近模板）；
+ * 折行多时自动收紧行距，确保每页 50 行都不会溢出到下一页。
+ * 实测：某真实工程 707 行代码 R=55，算得 12.65pt，与 Word 实测一致。 */
+function layoutCode(pages) {
+  var maxRows = PER_PAGE;
+  (pages || []).forEach(function (page) {
+    var rows = 0;
+    for (var i = 0; i < page.length; i++) rows += measureRows(page[i]);
+    if (rows > maxRows) maxRows = rows;
+  });
+  /* 无折行（行数正好 50）时直接用模板行距 13.7pt(274twips)，与模板完全一致；
+   * 只有当确实存在折行、50 行放不下时才按需收紧行距。 */
+  var tw = (maxRows <= PER_PAGE)
+    ? TEMPLATE_LINE_TWIPS
+    : Math.floor(BODY_HEIGHT_TWIPS * SAFETY / maxRows);
+  if (tw > TEMPLATE_LINE_TWIPS) tw = TEMPLATE_LINE_TWIPS;
+  if (tw < MIN_LINE_TWIPS) tw = MIN_LINE_TWIPS;
+  CODE_LINE_TWIPS = tw;
+  return tw;
+}
+
+/* 代码行段落属性
+ * 元素顺序必须符合 OOXML 规范：pageBreakBefore → widowControl → snapToGrid → spacing → ind → rPr
+ * 关键 1：行号由 Word 的「自动行号」功能生成（见 sectPr 的 w:lnNumType），
+ *         绝对不能在正文里写 "1<TAB>" 这类手写行号——那会篡改源码内容导致材料过不了审。
+ *         因此这里没有制表位，代码直接从左边距开始排（与模板一致）。
+ * 关键 2：必须显式写 before/after=0，否则 Word 会套用内置「正文」样式的段后 8 磅，
+ *         每行从 13.7pt 膨胀到 21.7pt，一页只能排 32 行。
+ * 关键 3：翻页必须用「段前分页」(pageBreakBefore)，不能用段内分页符。
+ *         段内分页符会把该段落的段落标记留在下一页，使下一页首行上方多出一个空行，
+ *         于是第 50 行被挤到再下一页。
+ * 行距由 layoutCode() 按实际折行量动态给出（CODE_LINE_TWIPS）。 */
+function codePPr(breakBefore) {
+  return (breakBefore ? '<w:pageBreakBefore/>' : '') +
+         '<w:widowControl w:val="0"/>' +
+         '<w:snapToGrid w:val="0"/>' +
+         '<w:spacing w:before="0" w:after="0" w:line="' + CODE_LINE_TWIPS + '" w:lineRule="exact"/>' +
+         '<w:ind w:left="0" w:right="0" w:firstLine="0"/>' +
+         runProps({ f: "宋体", sz: 18 });
+}
+/* 生成一个代码行段落（纯代码，行号由 Word 自动生成） */
+function codeLinePara(code, breakBefore) {
+  return para(run(code, { f: "宋体", sz: 18 }), codePPr(breakBefore));
+}
+
+/* 封面（工具模板：22 行段落，行号左对齐 + 内容居中，隶书 26pt，行距 240 twips）
+ * 行位复刻本地模板：行2系统名称、行3版本号、
+ * 行10-14「源程序清单」竖排、行21编制单位、行22日期 */
+function coverToolXml(meta) {
+  var vChars = ["源", "程", "序", "清", "单"];
+  var out = "";
+  for (var r = 1; r <= 22; r++) {
+    var content = "";
+    if (r === 2) content = run(meta.name || "", { f: "隶书", sz: 52 });
+    else if (r === 3) content = run(meta.version || "", { f: "隶书", sz: 52 });
+    else if (r >= 10 && r <= 14) content = run(vChars[r - 10], { f: "隶书", sz: 52 });
+    else if (r === 21) content = run(meta.org || "", { f: "隶书", sz: 52 });
+    else if (r === 22) content = run(meta.date || "", { f: "隶书", sz: 52 });
+    var numRun = '<w:r><w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">' + r + '</w:t></w:r>';
+    var tabRun = '<w:r>' + runProps({ f: "宋体", sz: 18 }) + '<w:tab/></w:r>';
+    /* 封面版式（用户已确认，勿改）：段后固定 8 磅(160twips)、单倍行距。
+     * 必须显式写 w:after="160" —— 因为新增的 styles.xml 把默认段后设为 0，
+     * 不显式声明会导致封面整体压缩（末行位置 517pt → 661pt）。 */
+    var ppr = '<w:tabs><w:tab w:val="center" w:pos="4156"/></w:tabs>' +
+      '<w:spacing w:before="0" w:after="160" w:line="240" w:lineRule="auto"/>' + runProps({ f: "宋体", sz: 18 });
+    out += '<w:p><w:pPr>' + ppr + '</w:pPr>' + numRun + tabRun + content + '</w:p>';
+  }
+  return out;
+}
+
+/* 正文 XML */
+function bodyXml(pages, meta) {
+  var xml = "";
+  xml += coverToolXml(meta);
+  xml += '<w:p><w:pPr><w:widowControl w:val="0"/>' +
+    '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
+    sectPr(false) + '</w:pPr></w:p>';
+  var fillLast = pages.length >= 60; // 60 页及以上，最后一页也必须满 50 行
+  pages.forEach(function (page, pi) {
+    var last = pi === pages.length - 1;
+    var mustFill = !last || fillLast;
+    /* 除第一页代码外，每页首行用「段前分页」翻页，避免首行上方多出空行 */
+    var brk = pi > 0;
+    page.forEach(function (line, li) {
+      xml += para(run(line, { f: "宋体", sz: 18 }), codePPr(brk && li === 0));
+    });
+    if (mustFill) {
+      for (var k = page.length; k < PER_PAGE; k++) {
+        xml += para("", codePPr(brk && k === 0));
+      }
+    }
+  });
+  xml += sectPr(true);
+  return xml;
+}
+function sectPr(withHeader) {
+  var hdr = withHeader ? '<w:headerReference w:type="default" r:id="rId1"/>' : "";
+  var pg = withHeader ? '<w:pgNumType w:start="1"/>' : "";
+  /* 代码分节启用 Word 自动行号。与模板完全一致：只写 countBy。
+   * w:restart 不写 → 按 OOXML 默认值 newPage，即每页从 1 重新编号（模板实测每页 1~50）。
+   * w:distance 不写 → 默认 0，行号紧贴正文左侧画在页边距内。
+   * 这样行号是「版式」而非「正文内容」，不会篡改源码。 */
+  var ln = withHeader ? '<w:lnNumType w:countBy="1"/>' : "";
+  /* w:type 必须显式声明为 nextPage：否则 Word 会把这个分节当成「连续」分节，
+   * 代码会紧接着封面继续排在第 1 页上（实测第 1 页会出现 3 行代码）。
+   * 分节内元素顺序必须为：headerReference → type → pgSz → pgMar → lnNumType → pgNumType → cols → docGrid */
+  return '<w:sectPr>' + hdr + '<w:type w:val="nextPage"/>' +
+    '<w:pgSz w:w="11906" w:h="16838"/>' +
+    '<w:pgMar w:top="1440" w:right="1797" w:bottom="1440" w:left="1797" w:header="851" w:footer="992" w:gutter="0"/>' +
+    ln + pg +
+    '<w:cols w:space="720"/><w:docGrid w:type="lines" w:linePitch="240"/></w:sectPr>';
+}
+
+function headerXml(meta) {
+  var text = meta.name + (meta.version ? " " + meta.version : "");
+  var hdr = '<w:p><w:pPr>' +
+    '<w:pBdr><w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>' +
+    '<w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>' +
+    '<w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/>' +
+    '<w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/></w:pBdr>' +
+    '<w:tabs><w:tab w:val="right" w:pos="7800"/></w:tabs>' +
+    runProps({ f: "宋体", sz: 18 }) + '</w:pPr>' +
+    run(text, { f: "宋体", sz: 18 }) +
+    '<w:r>' + runProps({ f: "宋体", sz: 18 }) + '<w:tab/></w:r>' +
+    '<w:r>' + runProps({ f: "宋体", sz: 18 }) + '<w:fldChar w:fldCharType="begin"/></w:r>' +
+    '<w:r>' + runProps({ f: "宋体", sz: 18 }) + '<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+    '<w:r>' + runProps({ f: "宋体", sz: 18 }) + '<w:fldChar w:fldCharType="end"/></w:r>' +
+    '</w:p>';
+  return xmlDecl() + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' + hdr + '</w:hdr>';
+}
+
+function buildDocx(pages, meta) {
+  layoutCode(pages);                            // 按折行量动态定行距，保证每页 50 行
+  var documentXml = xmlDecl() +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<w:body>' + bodyXml(pages, meta) + '</w:body></w:document>';
+
+  var contentTypes = xmlDecl() +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+    '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+    '</Types>';
+
+  var rootRels = xmlDecl() +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+    '</Relationships>';
+
+  var docRels = xmlDecl() +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    '</Relationships>';
+
+  /* 样式定义：docDefaults 必须显式声明段后 0 磅 + 单倍行距。
+   * 若缺失 styles.xml，Word 会套用内置「正文」样式（段后 8 磅 / 1.08 倍行距），
+   * 使每个代码行段落额外膨胀 8 磅，一页只能排 32 行。 */
+  var stylesXml = xmlDecl() +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults>' +
+    '<w:rPrDefault><w:rPr>' +
+    '<w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体" w:cs="宋体"/>' +
+    '<w:sz w:val="18"/><w:szCs w:val="18"/>' +
+    '</w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr>' +
+    '<w:widowControl w:val="0"/>' +
+    '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
+    '</w:pPr></w:pPrDefault>' +
+    '</w:docDefaults>' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">' +
+    '<w:name w:val="Normal"/><w:qFormat/>' +
+    '<w:pPr><w:widowControl w:val="0"/>' +
+    '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' +
+    '<w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>' +
+    '<w:sz w:val="18"/></w:rPr>' +
+    '</w:style>' +
+    '</w:styles>';
+
+  var coreProps = xmlDecl() +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+    '<dc:title>' + escXml(meta.name) + '</dc:title>' +
+    '<dc:creator>' + escXml(meta.org || "") + '</dc:creator>' +
+    '</cp:coreProperties>';
+
+  var appProps = xmlDecl() +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    '<Application>SoftCopyright Filter</Application></Properties>';
+
+  var zip = makeZip([
+    { name: "[Content_Types].xml", data: utf8Bytes(contentTypes) },
+    { name: "_rels/.rels", data: utf8Bytes(rootRels) },
+    { name: "word/document.xml", data: utf8Bytes(documentXml) },
+    { name: "word/_rels/document.xml.rels", data: utf8Bytes(docRels) },
+    { name: "word/styles.xml", data: utf8Bytes(stylesXml) },
+    { name: "word/header1.xml", data: utf8Bytes(headerXml(meta)) },
+    { name: "docProps/core.xml", data: utf8Bytes(coreProps) },
+    { name: "docProps/app.xml", data: utf8Bytes(appProps) }
+  ]);
+  return zip;
+}
+
+/* ============================================================
+ * HTML 转义工具
+ * ============================================================ */
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ============================================================
+ * UI 更新
+ * ============================================================ */
+function onStateChange() {
+  var selected = getSelected();
+  var activeCount = state.entries.length - state.deletedPaths.size;
+  /* 目录信息随删除实时同步 */
+  $("dir-path").textContent = state.entries.length
+    ? (state.rootName + "  （" + activeCount + " 个文件" +
+       (state.deletedPaths.size ? "，已删除 " + state.deletedPaths.size : "") + "）")
+    : "尚未选择目录";
+  var totalEl = $("st-total");
+  totalEl.textContent = activeCount;
+  totalEl.title = state.deletedPaths.size
+    ? ("原扫描 " + state.entries.length + " 个文件，已手动删除 " + state.deletedPaths.size +
+       " 个（" + activeCount + " 个有效）。点击「重新扫描」可恢复。")
+    : "";
+  $("st-keep").textContent = selected.length;
+  var box = $("file-list");
+  if (!state.entries.length) {
+    box.innerHTML = '<div class="empty-tip">请先选择项目目录</div>';
+    $("st-lines").textContent = "0";
+    $("st-pages").textContent = "0";
+    $("gen-tip").textContent = "";
+    return;
+  }
+  if (!selected.length) {
+    box.innerHTML = '<div class="empty-tip">当前过滤条件下没有入选文件，请调整过滤规则</div>';
+    $("st-lines").textContent = "0";
+    $("st-pages").textContent = "0";
+    $("gen-tip").textContent = "当前过滤条件下没有入选文件" + deletedTip();
+    return;
+  }
+  var html = "";
+  selected.forEach(function (en) {
+    html += '<div class="file-row" data-rel="' + escHtml(en.relPath) + '">' +
+      '<span class="ic">' + fileIcon(en.ext) + "</span>" +
+      '<span class="name">' + escHtml(en.name) + '</span>' +
+      '<span class="rel">' + escHtml(en.relPath) + "</span>" +
+      '<span class="cnt">' + en.size + " B</span>" +
+      '<button class="del-btn" title="从导出列表中删除此文件" data-rel="' + escHtml(en.relPath) + '">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+      '</button></div>';
+  });
+  box.innerHTML = html;
+  /* 绑定删除按钮事件 */
+  box.querySelectorAll(".del-btn").forEach(function (btn) {
+    btn.addEventListener("click", async function () {
+      var rel = btn.getAttribute("data-rel");
+      var ok = await showModal({
+        title: "确认删除",
+        icon: "warn",
+        message: "确定要删除文件「" + escHtml(rel) + "」吗？删除后该文件代码将不会被导出。",
+        buttons: [
+          { text: "取消", value: false },
+          { text: "确认删除", value: true, primary: true }
+        ]
+      });
+      if (ok) {
+        state.deletedPaths.add(rel);
+        onStateChange();
+        showToast("已删除「" + rel + "」", "success");
+      }
+    });
+  });
+  updateLines(selected);
+}
+function fileIcon(ext) {
+  var map = { py: "PY", java: "J", js: "JS", ts: "TS", c: "C", h: "H", cpp: "CPP", go: "GO", rs: "RS", sql: "SQL", html: "HTM" };
+  return map[ext] || ext.toUpperCase().slice(0, 3);
+}
+/* 手动删除文件后的提示片段 */
+function deletedTip() {
+  if (!state.deletedPaths.size) return "";
+  return " ｜ 已手动删除 " + state.deletedPaths.size + " 个文件（不计入导出），可点击「重新扫描」恢复";
+}
+async function updateLines(selected) {
+  var res = await buildLines(selected);
+  var pages = paginate(res.lines);
+  var limit = getPageLimit();
+  var out = pagesForTemplate(pages);
+  var dropped = Math.max(0, pages.length - out.length);
+  $("st-lines").textContent = res.lines.length.toLocaleString();
+  /* 页数卡片固定显示「目录内可导出的代码页总数」，不随用户设定的导出上限变化 */
+  $("st-pages").textContent = pages.length;
+  $("st-pages").title = "目录内共 " + pages.length + " 页代码（50 行/页，封面不计入）；本次导出 " +
+    out.length + " 页" + (dropped ? "，超出上限丢弃 " + dropped + " 页" : "");
+  var tip = pages.length > limit
+    ? "工具模板：代码共 " + pages.length + " 页，按设定只导出前 " + limit + " 页，已丢弃 " + dropped + " 页"
+    : "工具模板：代码共 " + pages.length + " 页，未超过设定 " + limit + " 页，全部导出";
+  if (res.skipped.length) tip += " ｜ 已跳过 " + res.skipped.length + " 个文件";
+  if (res.truncated) tip += " ｜ " + res.truncated + " 个超长行已截断（保证每页 50 行）";
+  tip += deletedTip();
+  $("gen-tip").textContent = tip;
+  $("gen-tip").title = res.skipped.join("\n");
+}
+
+/* ============================================================
+ * 生成与下载
+ * ============================================================ */
+function getDefaultDate() {
+  var d = new Date();
+  return d.getFullYear() + "." + String(d.getMonth() + 1).padStart(2, "0");
+}
+var DEFAULT_META = {
+  name: "软著申请的伟大系统",
+  version: "V1.0",
+  org: "EDISON",
+  date: getDefaultDate()
+};
+function getMeta() {
+  return {
+    name: $("inp-name").value.trim() || DEFAULT_META.name,
+    version: $("inp-ver").value.trim() || DEFAULT_META.version,
+    org: $("inp-org").value.trim() || DEFAULT_META.org,
+    date: $("inp-date").value.trim() || DEFAULT_META.date
+  };
+}
+function safeName(s) {
+  return s.replace(/[\\/:*?"<>|]/g, "_").trim() || "未命名软件";
+}
+async function checkMetaOrPrompt() {
+  var name = $("inp-name").value.trim();
+  var ver = $("inp-ver").value.trim();
+  var org = $("inp-org").value.trim();
+  var date = $("inp-date").value.trim();
+  if (name && ver && org && date) return true;
+  var defaults = [
+    { label: "默认系统名称", value: DEFAULT_META.name, id: "inp-name", filled: !!name },
+    { label: "默认系统版本", value: DEFAULT_META.version, id: "inp-ver", filled: !!ver },
+    { label: "默认封面署名", value: DEFAULT_META.org, id: "inp-org", filled: !!org },
+    { label: "默认日期", value: DEFAULT_META.date, id: "inp-date", filled: !!date }
+  ];
+  var result = await showModal({
+    title: "部分信息未填写",
+    message: "以下信息未填写，你可以继续填写或使用默认值：",
+    icon: "warn",
+    defaults: defaults,
+    buttons: [
+      { text: "继续填写", value: "continue", primary: false },
+      { text: "使用默认", value: "default", primary: true }
+    ]
+  });
+  if (result === "default") {
+    defaults.forEach(function (d) { if (!d.filled) $(d.id).value = d.value; });
+    onStateChange();
+    return true;
+  }
+  return false;
+}
+/* 透明加密软件（亿赛通 E-SafeNet / 天锐绿盾 / 深信服等）只允许白名单程序读取明文，
+ * 浏览器不在白名单内，只能读到密文 → 表现为「几乎提取不到代码」。这里给出明确指引。 */
+function warnEncrypted(selCount, binaryCount) {
+  return showModal({
+    icon: "warn",
+    title: "文件内容读不到（疑似被加密）",
+    message: "共选中 " + selCount + " 个文件，其中 <b>" + binaryCount + "</b> 个文件读到的是密文/二进制内容，无法提取代码。<br><br>" +
+      "常见原因：电脑安装了<b>透明加密软件</b>（如亿赛通 E-SafeNet、天锐绿盾、深信服等）。" +
+      "这类软件只允许白名单程序（PyCharm、VS Code、python.exe 等）读取明文，" +
+      "浏览器不在白名单里，读到的就是加密后的数据。<br><br>" +
+      "<b>解决办法（任选其一）：</b><br>" +
+      "1. 在加密软件客户端里对源文件执行「解密」或「外发」，再导入解密后的文件；<br>" +
+      "2. 用白名单程序打开后「另存为」到普通目录，再导入；<br>" +
+      "3. 请 IT 将浏览器加入加密软件白名单；<br>" +
+      "4. 改用本地脚本生成（Python 在白名单内，可读到明文）。",
+    buttons: [{ text: "取消", value: false }, { text: "仍然继续", value: true, primary: true }]
+  });
+}
+async function ensureReady() {
+  var selected = getSelected();
+  if (!selected.length) { await showWarn("没有入选文件，请先选择目录或调整过滤规则"); return null; }
+  var meta = getMeta();
+  var res = await buildLines(selected);
+  var pages = pagesForTemplate(paginate(res.lines));
+  if (!pages.length) {
+    if (res.binary > 0) await warnEncrypted(selected.length, res.binary);
+    else await showWarn("过滤后没有代码行，请检查「保留的文件类型」和排除规则");
+    return null;
+  }
+  if (res.binary > 0 && res.binary * 2 >= selected.length) {
+    var go = await warnEncrypted(selected.length, res.binary);
+    if (!go) return null;
+  }
+  return { pages: pages, meta: meta, res: res };
+}
+
+$("btn-docx").addEventListener("click", async function () {
+  var ok = await checkMetaOrPrompt();
+  if (!ok) return;
+  var ready = await ensureReady();
+  if (!ready) return;
+  var label = "工具模板";
+  var docx = buildDocx(ready.pages, ready.meta);
+  var blob = new Blob([docx], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  var fname = safeName(ready.meta.name) + "-源程序清单-" + label + ".docx";
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+  showToast("DOCX 已生成下载", "success");
+});
+
+/* ============================================================
+ * 初始化
+ * ============================================================ */
+makeTagBox("wrap-include", "suggest-include", state.includeTypes, {
+  placeholder: "输入扩展名后回车，如 py",
+  suggestions: ALL_EXTS
+});
+makeTagBox("wrap-exclude", "suggest-exclude", state.excludeTypes, {
+  placeholder: "排除的扩展名",
+  suggestions: ALL_EXTS
+});
+makeTagBox("wrap-exdir", "suggest-exdir", state.excludeDirs, {
+  placeholder: "排除的文件夹名",
+  suggestions: COMMON_EXCLUDE_DIRS
+});
+var excludeNameBox = makeTagBox("wrap-exnames", "suggest-exnames", state.excludeNames, {
+  placeholder: "输入文件名后回车，如 __init__.py",
+  suggestions: []
+});
+var onlyDirBox = makeTagBox("wrap-onlydir", "suggest-onlydir", state.onlyDirs, {
+  placeholder: "手动输入文件夹名",
+  suggestions: []
+});
+
+$("opt-drop-empty").addEventListener("change", function () {
+  state.dropEmpty = this.checked;
+  onStateChange();
+});
+$("opt-strip").addEventListener("change", function () {
+  state.strip = this.checked;
+  onStateChange();
+});
+
+["inp-name", "inp-ver", "inp-org", "inp-date"].forEach(function (id) {
+  $(id).addEventListener("input", onStateChange);
+});
+
+/* 代码页数：默认 60，只保留前 N 页代码（封面不计入）。
+ * 用 change 而非 input，避免每敲一个数字就重算；失焦时把非法值回写成默认值。 */
+$("inp-pages").addEventListener("change", function () {
+  this.value = getPageLimit();
+  onStateChange();
+});
+
+onStateChange();
+</script>
+</body>
+</html>

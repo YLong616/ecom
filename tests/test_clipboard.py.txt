@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""剪贴板回归测试 —— 防止「复制全部粘到外部是空的」这个老问题复发。
+
+背景（实测证据见 ecom/clipboard.py 文档）：
+  * 旧实现走 Tk 的 clipboard_append（延迟渲染），主线程忙时外部程序拿不到内容；
+  * 在有 Tk 的进程里直接 Win32 SetClipboardData 也会被 Tk 顶掉；
+  * 现在 Windows 下由「无 Tk 的子进程」写入 + 立即渲染，且**在后台线程异步执行**。
+
+关键用例：
+  test_copy_all_external_read_after_busy        —— 忙等后外部进程仍能读到完整内容
+  test_copy_all_is_non_blocking_and_no_message  —— 复制不阻塞主线程（右键菜单不卡），
+                                                   且不再往输入框写「已复制 N 字符」
+
+运行（项目根目录 projects/eCOM 下）：
+    python -m unittest tests.test_clipboard -v
+"""
+
+import os
+import subprocess
+import sys
+import time
+import tkinter as tk
+import unittest
+from unittest import mock
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ecom import clipboard as clip  # noqa: E402
+
+try:
+    import ecom.app as app_mod
+    from ecom.app import EcomApp
+except Exception as exc:  # 无 tkinter 环境
+    EcomApp = None
+    app_mod = None
+    _import_error = exc
+
+_READER = (
+    "import ctypes, ctypes.wintypes as wt\n"
+    "u=ctypes.windll.user32; k=ctypes.windll.kernel32\n"
+    "H=ctypes.c_void_p\n"
+    "u.OpenClipboard.argtypes=[H]; u.OpenClipboard.restype=wt.BOOL\n"
+    "u.GetClipboardData.argtypes=[ctypes.c_uint]; u.GetClipboardData.restype=H\n"
+    "k.GlobalLock.argtypes=[H]; k.GlobalLock.restype=H\n"
+    "k.GlobalUnlock.argtypes=[H]\n"
+    "assert u.OpenClipboard(None)\n"
+    "h=u.GetClipboardData(13)\n"
+    "s=ctypes.wstring_at(k.GlobalLock(h)) if h else ''\n"
+    "u.CloseClipboard()\n"
+    "print(len(s), s[:12].replace('\\n','|'))\n"
+)
+
+
+def _clipboard_usable():
+    """剪贴板当前是否可写：被其它程序占用、或会话/沙箱限制时会不可用。"""
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        u = ctypes.windll.user32
+        u.OpenClipboard.argtypes = [ctypes.c_void_p]
+        u.OpenClipboard.restype = wt.BOOL
+        u.CloseClipboard.restype = wt.BOOL
+        if u.OpenClipboard(None):
+            u.CloseClipboard()
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _external_read():
+    """在独立进程里读剪贴板（等价于记事本 Ctrl+V 的取数路径）。"""
+    out = subprocess.run([sys.executable, "-c", _READER], stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, timeout=60)
+    if out.returncode != 0:
+        return None, out.stderr.decode("utf-8", "replace")
+    parts = out.stdout.decode("utf-8", "replace").strip().split(" ", 1)
+    if not parts or not parts[0].isdigit():
+        return 0, ""          # 剪贴板为空（或输出异常）时不要崩，交给调用方断言
+    return int(parts[0]), (parts[1] if len(parts) > 1 else "")
+
+
+@unittest.skipIf(os.name != "nt", "剪贴板立即渲染路径仅 Windows")
+class TestClipboardWriter(unittest.TestCase):
+    def test_set_clipboard_returns_true_and_verifies(self):
+        if not _clipboard_usable():
+            self.skipTest("剪贴板不可用（被占用 / 会话或沙箱限制），跳过")
+
+        """set_clipboard 内部即完成「写入 + 回读校验」，大文本也要 True。"""
+        text = "AT+QGMR\r\n" * 7000          # 63000 字符
+        self.assertTrue(clip.set_clipboard(text))
+        n, _ = _external_read()
+        self.assertEqual(n, len(text))
+
+    def test_set_clipboard_empty_text_is_false(self):
+        self.assertFalse(clip.set_clipboard(""))
+
+    def test_no_inprocess_win32_writer_in_app(self):
+        """_clipboard_set（进程内 Win32 写）已被证明会被 Tk 抹掉，不得再出现。"""
+        self.assertFalse(hasattr(app_mod, "_clipboard_set"))
+
+
+@unittest.skipIf(EcomApp is None, "无 tkinter / GUI 环境")
+class TestCopyRegression(unittest.TestCase):
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        # 复制全部成功后会弹提示框：整个用例期间都屏蔽，否则异步回调弹出模态框会卡住测试
+        self._mb = mock.patch("tkinter.messagebox.showinfo", lambda *a, **k: None)
+        self._mb.start()
+        self.app = EcomApp(self.root)
+        self.root.update()
+
+    def tearDown(self):
+        self._mb.stop()
+        self.app._poll_interval_ms = 10 ** 9
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    # ---------------- helpers ----------------
+    def _pump(self, seconds=0.05):
+        try:
+            self.root.update()
+        except tk.TclError:
+            pass
+        time.sleep(seconds)
+
+    def _wait_external_len(self, want, timeout=25.0):
+        """等后台复制落地：轮询外部进程读到的长度。"""
+        deadline = time.time() + timeout
+        last = (None, "")
+        while time.time() < deadline:
+            self._pump(0.02)
+            last = _external_read()
+            if last[0] == want:
+                return last
+        return last
+
+    # ---------------- tests ----------------
+    def test_copy_handlers_return_break(self):
+        """Ctrl+C / <<Copy>> / 粘贴 / 全选 必须 return "break"，
+        否则 Tk 类绑定会再次接管剪贴板（延迟渲染）。"""
+        w = self.app.output
+        ev = type("Ev", (), {"widget": w})()
+        self.assertEqual(self.app._on_copy_key(ev), "break")
+        self.assertEqual(self.app._on_paste_key(ev), "break")
+        self.assertEqual(self.app._on_select_all_key(ev), "break")
+
+    def test_copy_selection_via_virtual_event(self):
+        if not _clipboard_usable():
+            self.skipTest("剪贴板不可用（被占用 / 会话或沙箱限制），跳过")
+
+        """Ctrl+C 的真实路径（Windows 上由 <<Copy>> 虚拟事件触发）："""
+        w = self.app.output
+        w.delete("1.0", "end")
+        w.insert("1.0", "AT+QGMR\nOK\n")
+        self.root.update_idletasks()
+        w.tag_add("sel", "1.0", "1.8")
+        w.event_generate("<<Copy>>")
+        n, head = self._wait_external_len(len("AT+QGMR"))
+        self.assertEqual(head, "AT+QGMR")
+        self.assertEqual(n, len("AT+QGMR"))
+
+    def test_copy_all_is_non_blocking_and_silent(self):
+        if not _clipboard_usable():
+            self.skipTest("剪贴板不可用（被占用 / 会话或沙箱限制），跳过")
+
+        """① 复制全部不得阻塞主线程（否则右键菜单卡顿）；② 不往输入框写「已复制 N 字符」。"""
+        w = self.app.output
+        w.delete("1.0", "end")
+        w.insert("1.0", "[2026-09-29_19:00:00:000]  RX  OK\n" * 4000)
+        self.root.update_idletasks()
+        want = len(w.get("1.0", "end-1c"))
+
+        t0 = time.time()
+        self.app._copy_all(w)
+        elapsed = time.time() - t0
+
+        self.assertLess(elapsed, 0.5, "复制全部阻塞主线程 %.3fs" % elapsed)
+        n, _ = self._wait_external_len(want)
+        self.assertEqual(n, want)
+
+        typed = self.app.input.get("1.0", "end-1c")
+        self.assertEqual(typed.strip(), "", "输入框不应再出现复制提示：%r" % typed[:80])
+        self.assertNotIn(self.app._t("copy_ok", n=want), typed)
+
+    def test_copy_all_external_read_after_busy(self):
+        if not _clipboard_usable():
+            self.skipTest("剪贴板不可用（被占用 / 会话或沙箱限制），跳过")
+
+        """复制全部 -> 主线程忙等 1s（模拟持续收 Log）-> 独立进程仍应读到完整内容。"""
+        w = self.app.output
+        w.delete("1.0", "end")
+        w.insert("1.0", "[2026-09-29_19:00:00:000]  RX  OK\n" * 3000)
+        self.root.update_idletasks()
+        want = len(w.get("1.0", "end-1c"))
+
+        self.app._copy_all(w)
+
+        end = time.time() + 1.0
+        while time.time() < end:            # 忙等：不处理事件循环
+            pass
+
+        n, head = self._wait_external_len(want)
+        self.assertEqual(n, want, "外部读到的长度=%s，期望=%s（head=%s）" % (n, want, head))
+        self.assertTrue(head.startswith("[2026-09-29"))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

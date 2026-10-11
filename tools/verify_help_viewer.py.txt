@@ -1,0 +1,56 @@
+# -*- coding: utf-8 -*-
+"""help_viewer 复制路径冒烟：Ctrl+C 走 set_clipboard，且绑定了 break 拦截。"""
+import ctypes
+import ctypes.wintypes as wt
+import tkinter as tk
+
+import ecom
+from ecom import help_viewer
+
+print("package:", ecom.__file__)
+root = tk.Tk()
+root.withdraw()
+win = help_viewer.show_help(root, "zh")
+root.update()
+
+
+def walk(w):
+    for c in w.winfo_children():
+        yield c
+        for g in walk(c):
+            yield g
+
+
+txts = [w for w in walk(win) if isinstance(w, tk.Text)]
+t = txts[0]
+print("text widgets:", len(txts))
+for seq in ("<Control-c>", "<<Copy>>", "<<Paste>>", "<<Cut>>", "<Control-a>"):
+    print("  binding %-12s -> %r" % (seq, t.bind(seq)))
+
+win.deiconify()
+win.lift()
+t.tag_add("sel", "1.0", "1.30")
+root.update()
+t.focus_set()
+root.update()
+try:
+    print("selection:", repr(t.get("sel.first", "sel.last")[:30]))
+except tk.TclError as e:
+    print("selection: <none> (%s)" % e)
+# 物理按键事件用 event_generate 不派发，Windows 上复制走 <<Copy>> 虚拟事件
+t.event_generate("<<Copy>>")
+root.update()
+
+u = ctypes.windll.user32
+k = ctypes.windll.kernel32
+H = ctypes.c_void_p
+u.OpenClipboard.argtypes = [H]; u.OpenClipboard.restype = wt.BOOL
+u.GetClipboardData.argtypes = [ctypes.c_uint]; u.GetClipboardData.restype = H
+k.GlobalLock.argtypes = [H]; k.GlobalLock.restype = H
+u.OpenClipboard(None)
+h = u.GetClipboardData(13)
+s = ctypes.wstring_at(k.GlobalLock(h)) if h else ""
+u.CloseClipboard()
+print("clipboard after Ctrl+C: %d chars, head=%r" % (len(s), s[:30]))
+print("RESULT:", "PASS" if s else "FAIL")
+root.destroy()

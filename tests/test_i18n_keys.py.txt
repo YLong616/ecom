@@ -1,0 +1,173 @@
+# -*- coding: utf-8 -*-
+"""i18n 全局审计：代码里出现的每个文案键，必须在 zh 与 en 里都存在；两侧键集必须一致。
+
+背景：v14.2 我把 i18n 的一段区间整体替换，**误删了落在同一区间里的 12 个 `stress_test_*` 键**，
+界面直接把 key 名当文案渲染出来（`stress_test_resp` 而不是「返回结果：」）。这个用例就是防这类事故。
+
+运行（项目根目录 projects/eCOM 下）：
+    python -m unittest tests.test_i18n_keys -v
+"""
+
+import glob
+import os
+import re
+import sys
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from ecom import i18n  # noqa: E402
+
+# 只扫「完整字面量」调用：_t("key") / _t("key", ...)。要求键字面量后面紧跟 , 或 )，
+# 这样 _t("stress_ex_" + m) 这类拼接不会被误判成缺键。
+_CALL = re.compile(r'_t\(\s*"([A-Za-z0-9_]+)"\s*[,)]')
+# 带参数渲染的调用：_t("key", xxx=...) —— 这类键必须是合法 format 模板
+_CALL_START = re.compile(r'_t\(\s*"([A-Za-z0-9_]+)"\s*,')
+_KWARG = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*=')
+
+
+def _t_calls(src):
+    """逐个产出 (key, 实参文本)。用括号配对扫描，故 `n=len(x)` 这种嵌套也不会截断。"""
+    for m in _CALL_START.finditer(src):
+        depth = 1
+        i = m.end()
+        while i < len(src) and depth:
+            if src[i] == "(":
+                depth += 1
+            elif src[i] == ")":
+                depth -= 1
+            i += 1
+        yield m.group(1), src[m.end():i - 1]
+
+# 靠拼接得到的键（静态扫不到），单独列出来核对
+DYNAMIC_KEYS = [
+    "mode_at", "mode_stress", "mode_switch",
+    "stress_match_contains", "stress_match_regex", "stress_match_exact",
+    "stress_ex_contains", "stress_ex_regex", "stress_ex_exact",
+    "stress_test_section", "stress_test_at", "stress_test_send", "stress_test_hint",
+    "stress_test_wait", "stress_test_noresp", "stress_test_empty", "stress_test_pass",
+    "stress_test_fail", "stress_test_noexp", "stress_test_busy", "stress_test_resp",
+    "stress_test_target", "stress_test_port_closed", "stress_test_fill",
+    "stress_test_fill_done",
+    "macro_title", "macro_add", "macro_save", "macro_del_checked", "macro_col_key",
+    "macro_col_value", "macro_col_len", "macro_col_ops",
+    "macro_col_edit", "macro_col_del", "macro_len_bytes", "macro_len_bad",
+    "macro_preview", "macro_err_key_empty", "macro_err_key_bad", "macro_err_key_dup",
+    "macro_err_key_dup_ci", "macro_err_key_space", "macro_err_value",
+    "macro_expand_err",
+    "macro_search_label", "macro_search_clear", "macro_search_count",
+    "macro_search_none",
+]
+
+def _used_keys():
+    used = {}
+    for f in sorted(glob.glob(os.path.join(ROOT, "ecom", "*.py"))):
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            src = fh.read()
+        for m in _CALL.finditer(src):
+            used.setdefault(m.group(1), set()).add(os.path.basename(f))
+    return used
+
+
+class _Any(dict):
+    """给 .format_map 用的兜底字典：任何占位符都给个占位值。"""
+
+    def __missing__(self, k):
+        return "<%s>" % k
+
+class TestI18nKeys(unittest.TestCase):
+    def test_literal_keys_exist_in_both_languages(self):
+        used = _used_keys()
+        self.assertGreater(len(used), 100, "扫描到的文案键太少，扫描逻辑可能失效")
+        missing_zh = sorted(k for k in used if i18n.get("zh", k) == k)
+        missing_en = sorted(k for k in used if i18n.get("en", k) == k)
+        self.assertEqual(missing_zh, [], "zh 缺这些键：%s"
+                         % [(k, sorted(used[k])) for k in missing_zh])
+        self.assertEqual(missing_en, [], "en 缺这些键：%s"
+                         % [(k, sorted(used[k])) for k in missing_en])
+        print("[i18n] 字面量键 %d 个，zh/en 均齐备" % len(used))
+
+    def test_dynamic_key_families_exist(self):
+        missing = [(lang, k) for k in DYNAMIC_KEYS for lang in ("zh", "en")
+                   if i18n.get(lang, k) == k]
+        self.assertEqual(missing, [], "动态键缺失：%s" % missing)
+        print("[i18n] 动态键 %d 个（含 %s 等）齐备" % (len(DYNAMIC_KEYS), DYNAMIC_KEYS[0]))
+
+    def test_zh_en_key_sets_match(self):
+        zh = set(i18n.I18N["zh"].keys())
+        en = set(i18n.I18N["en"].keys())
+        self.assertEqual(sorted(zh - en), [], "en 少了这些键（zh 有 en 无）")
+        self.assertEqual(sorted(en - zh), [], "zh 少了这些键（en 有 zh 无）")
+        print("[i18n] zh/en 各 %d 键，两侧一致" % len(zh))
+
+    def test_no_placeholder_named_key(self):
+        """app._t(key, **fmt) 的形参就叫 key，因此占位符不能叫 {key}（会 TypeError）。"""
+        bad = []
+        for lang in ("zh", "en"):
+            for k, v in i18n.I18N[lang].items():
+                if isinstance(v, str) and "{key}" in v:
+                    bad.append((lang, k))
+        self.assertEqual(bad, [], "这些文案用了 {key} 占位符（会与 _t 的形参冲突）：%s" % bad)
+
+
+    def test_fmt_keys_are_valid_templates(self):
+        """**会被带参数渲染**的文案必须是合法模板：裸 } 会 ValueError（曾发过一次）。"""
+        keys = set()
+        for f in sorted(glob.glob(os.path.join(ROOT, "ecom", "*.py"))):
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                keys.update(k for k, args in _t_calls(fh.read()) if args.strip())
+        self.assertGreater(len(keys), 20, "没扫到带参文案键，扫描逻辑可能失效")
+        bad = []
+        for lang in ("zh", "en"):
+            for k in sorted(keys):
+                v = i18n.I18N[lang].get(k)
+                if not isinstance(v, str):
+                    continue
+                try:
+                    v.format_map(_Any())
+                except Exception as exc:
+                    bad.append((lang, k, str(exc)))
+        self.assertEqual(bad, [], "带参文案的花括号有问题（字面 } 要写 }}）：%s" % bad)
+        print("[i18n] 带参渲染的文案键 %d 个，模板均合法" % len(keys))
+
+    def test_get_never_raises(self):
+        """任何文案（哪怕花括号写坏）都不能让 i18n.get 抛异常。"""
+        kw = dict(name="X", n=1, e="y", exp="z", mode="m", t="a", s="b", port="p",
+                  other="o", i=1, msg="m")
+        for lang in ("zh", "en"):
+            for k in list(i18n.I18N[lang].keys()):
+                i18n.get(lang, k)
+                i18n.get(lang, k, **kw)
+
+    def test_fmt_keys_only_use_passed_placeholders(self):
+        """带参渲染的文案里，每个 {xxx} 都必须是该调用真的传进来的形参名。
+
+        否则 .format 抛 KeyError、被 i18n.get 的兜底吞掉，界面会显示**未替换的原文**
+        （`{name}` 原样露出）—— 这是静默坏掉，必须由测试拦住。
+        """
+        allowed = {}
+        for f in sorted(glob.glob(os.path.join(ROOT, "ecom", "*.py"))):
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                src = fh.read()
+            for k, args in _t_calls(src):
+                if not args.strip():
+                    continue
+                allowed.setdefault(k, set()).update(_KWARG.findall(args))
+        self.assertGreater(len(allowed), 15, "没扫到带参调用，扫描逻辑可能失效")
+        bad = []
+        for lang in ("zh", "en"):
+            for k, names in sorted(allowed.items()):
+                v = i18n.I18N[lang].get(k)
+                if not isinstance(v, str):
+                    continue
+                probe = v.replace("{{", "\x00").replace("}}", "\x01")
+                for tok in re.findall(r"\{([^{}]*)\}", probe):
+                    if tok not in names:
+                        bad.append((lang, k, tok, sorted(names)))
+        self.assertEqual(bad, [],
+                         "这些文案里的 {xxx} 不是该调用传入的形参（会被当占位符 / 或渲染不出来）：%s" % bad)
+        print("[i18n] 带参文案的占位符均与调用形参一致（覆盖 %d 个键）" % len(allowed))
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

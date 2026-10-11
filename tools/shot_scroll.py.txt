@@ -1,0 +1,40 @@
+# -*- coding: utf-8 -*-
+"""抓「默认尺寸」与「缩小后出现滚动条」两张图，验证缩小 + 滚动。
+
+输出：ui_shot_win_default.bmp / ui_shot_win_small.bmp
+"""
+import os
+import sys
+import tkinter as tk
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+
+from ecom.app import EcomApp        # noqa: E402
+from win_grab import grab_window    # noqa: E402
+
+root = tk.Tk()
+app = EcomApp(root)
+root.deiconify()
+root.update()
+app._sync_page_scroll()
+root.update()
+
+
+def shot(tag, w, h):
+    root.geometry("%dx%d+40+30" % (w, h))
+    root.update()
+    app._sync_page_scroll()
+    root.update()
+    out = os.path.join(HERE, "ui_shot_win_%s.bmp" % tag)
+    print("grab %-8s %s -> vbar=%s hbar=%s content=%sx%s region=%s" % (
+        tag, grab_window(int(root.wm_frame(), 16), out),
+        app.page_vbar.grid_info() != {}, app.page_hbar.grid_info() != {},
+        app.content.winfo_width(), app.content.winfo_height(),
+        app.page_canvas.cget("scrollregion")))
+
+
+shot("default", 1080, 900)
+shot("small", 700, 520)
+root.destroy()

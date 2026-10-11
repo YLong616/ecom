@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>eCOM UI v2 原型（左=监控 · 右=常驻AT快捷+文件）</title>
+<style>
+  :root{
+    --bg:#F2F4F7; --surface:#FFFFFF; --border:#D9DEE8;
+    --primary:#3B6FE0; --secondary:#ECEFF4;
+    --text:#1B2733; --muted:#6B7688; --success:#22A06B; --danger:#E5533D;
+    --te-bg:#101A28; --te-fg:#DDE4EC; --tx:#7FC1FF; --rx:#9BE3A4;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:"Segoe UI","Microsoft YaHei",sans-serif;}
+  body{background:#3a3f47; padding:28px; display:flex; justify-content:center;}
+  .win{width:1000px; background:var(--bg); border-radius:8px; overflow:hidden;
+       box-shadow:0 12px 40px rgba(0,0,0,.4);}
+  .menubar{background:#ffffff; border-bottom:1px solid var(--border); padding:6px 12px;
+           font-size:13px; color:var(--text); display:flex; gap:22px;}
+  .menubar span{cursor:pointer;} .menubar b{color:var(--muted); font-weight:400;}
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:6px;
+        margin:12px 12px 8px; padding:10px 14px;}
+  .card .head{display:flex; justify-content:space-between; align-items:center;
+              font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.3px;}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%;
+       background:var(--success); margin-right:6px;}
+  .row{display:flex; align-items:center; gap:8px; margin-top:9px; flex-wrap:nowrap;}
+  .lbl{font-size:12px; color:var(--muted); white-space:nowrap;}
+  .inp{height:28px; border:1px solid var(--border); border-radius:4px; background:#fff;
+       padding:0 8px; font-size:12px; color:var(--text); display:flex; align-items:center;
+       justify-content:space-between;}
+  .inp small{color:var(--muted);}
+  .btn{height:28px; padding:0 13px; border-radius:4px; font-size:12px; cursor:pointer;
+       border:1px solid transparent; display:inline-flex; align-items:center; white-space:nowrap;}
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-ghost{background:var(--secondary); color:var(--text); border-color:var(--border);}
+  .counts{margin-top:9px; font-size:12px; color:var(--muted); display:flex; align-items:center;}
+  .counts b{color:var(--text); font-weight:600;}
+
+  .body{display:flex; gap:10px; margin:0 12px 10px; height:340px;}
+  .left{flex:1; display:flex; flex-direction:column; gap:8px;}
+  .right{width:300px; display:flex; flex-direction:column; gap:8px;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:6px;
+         display:flex; flex-direction:column; overflow:hidden;}
+  .paneltitle{font-size:12px; color:var(--muted); font-weight:600; padding:7px 12px;
+              border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+
+  .opts{background:var(--surface); border:1px solid var(--border); border-radius:6px;
+        padding:7px 12px; display:flex; align-items:center; gap:14px; font-size:12px; color:var(--text);}
+  .opts label{display:flex; gap:4px; align-items:center; cursor:pointer; color:var(--text);}
+  .opts .right{width:auto;}
+
+  .monitor{background:var(--te-bg); border-radius:6px; flex:1; display:flex; flex-direction:column;
+           font-family:Consolas,"DejaVu Sans Mono",monospace; font-size:13px; color:var(--te-fg);}
+  .monitor .mhead{background:#0a1119; padding:6px 12px; display:flex; justify-content:space-between;
+                  align-items:center; font-family:inherit;}
+  .monitor .mhead .t{color:#8a97a6; font-size:12px; font-weight:600;}
+  .monitor .mbody{padding:8px 12px; line-height:1.6; overflow:hidden; flex:1;}
+  .monitor .ts{color:#6b7688;}
+  .mbody .tx{color:var(--tx); font-weight:600;} .mbody .rx{color:var(--rx); font-weight:600;}
+  .mbody .d{color:var(--te-fg);}
+
+  .sendbox{border:1px solid var(--border); border-radius:6px; padding:8px 12px; background:#fff;}
+  .sendbox textarea{width:100%; height:52px; border:1px solid var(--border); border-radius:4px;
+           padding:8px; font-family:Consolas,monospace; font-size:13px; resize:none; color:var(--text);}
+  .toolbar{display:flex; gap:8px; margin-top:8px; align-items:center;}
+
+  .at-grid{flex:1; padding:8px 10px; display:grid; grid-template-columns:1fr 1fr; gap:6px;
+           align-content:start; overflow:auto;}
+  .at-grid button{height:30px; background:var(--secondary); border:1px solid var(--border);
+          border-radius:4px; font-family:Consolas,monospace; font-size:12px; color:var(--text); cursor:pointer;}
+  .at-grid button:hover{border-color:var(--primary); color:var(--primary);}
+  .at-edit{padding:8px 10px; border-top:1px solid var(--border); display:flex; gap:6px;}
+  .at-edit .inp{flex:1;}
+  .at-foot{padding:0 10px 8px; display:flex; gap:6px;}
+
+  .file-row{display:flex; gap:6px; padding:8px 10px; align-items:center;}
+  .file-row .inp{flex:1;}
+  .file-meta{padding:0 10px; font-size:12px; color:var(--muted); display:flex; gap:16px; align-items:center;}
+  .file-ops{padding:8px 10px; display:flex; gap:6px;}
+
+  .statusbar{background:#ffffff; border-top:1px solid var(--border); padding:8px 14px;
+             font-size:12px; color:var(--muted); display:flex; justify-content:space-between;}
+  .statusbar .b{color:var(--text); font-weight:600;}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="menubar"><span><b>文件(F)</b></span><span><b>设置(S)</b></span></div>
+
+  <!-- 串口配置 -->
+  <div class="card">
+    <div class="head"><span>串口配置</span>
+      <span><span class="dot"></span>COM3 已连接</span></div>
+    <div class="row">
+      <span class="lbl">端口</span><div class="inp" style="width:90px;">COM3 <small>▾</small></div>
+      <button class="btn btn-ghost">刷新</button>
+      <span class="lbl" style="margin-left:6px;">波特率</span><div class="inp" style="width:90px;">115200 <small>▾</small></div>
+      <span class="lbl" style="margin-left:6px;">数据位</span><div class="inp" style="width:60px;">8 <small>▾</small></div>
+      <span class="lbl">停止位</span><div class="inp" style="width:60px;">1 <small>▾</small></div>
+      <span class="lbl">校验位</span><div class="inp" style="width:80px;">None <small>▾</small></div>
+      <span class="lbl">流控</span><div class="inp" style="width:80px;">None <small>▾</small></div>
+      <button class="btn btn-primary" style="margin-left:auto;">关闭串口</button>
+    </div>
+    <div class="counts"><span>发送 <b>0</b> 字节</span><span>接收 <b>12</b> 字节</span>
+      <button class="btn btn-ghost" style="margin-left:auto;">清零计数</button></div>
+  </div>
+
+  <div class="body">
+    <!-- 左栏：监控 -->
+    <div class="left">
+      <div class="opts">
+        <span style="color:var(--muted);font-size:12px;">显示选项</span>
+        <label><input type="checkbox" checked>时间戳</label>
+        <label><input type="checkbox" checked>方向</label>
+        <label><input type="checkbox">显示\r\n</label>
+        <label><input type="checkbox">接收HEX</label>
+        <button class="btn btn-ghost" style="margin-left:auto;">清空输出</button>
+      </div>
+
+      <div class="monitor">
+        <div class="mhead"><span class="t">输出（接收）</span><span style="color:#5c6b7c;font-size:11px;">记录Log</span></div>
+        <div class="mbody">
+          <div><span class="ts">14:02:11.123</span> <span class="rx">RX</span> <span class="d">AT+CGMR</span></div>
+          <div><span class="ts">14:02:11.180</span> <span class="tx">TX</span> <span class="d">OK</span></div>
+          <div><span class="ts">14:02:12.470</span> <span class="rx">RX</span> <span class="d">+CPIN: READY</span></div>
+          <div><span class="ts">14:02:12.505</span> <span class="rx">RX</span> <span class="d">+CSQ: 20,0</span></div>
+        </div>
+      </div>
+
+      <div class="sendbox">
+        <textarea>AT+CPIN?</textarea>
+        <div class="toolbar">
+          <button class="btn btn-primary">发送</button>
+          <span class="lbl">类型</span><div class="inp" style="width:80px;">ASCII <small>▾</small></div>
+          <span class="lbl">后缀</span><div class="inp" style="width:80px;">CR-LF <small>▾</small></div>
+          <button class="btn btn-ghost" style="margin-left:auto;">清空输入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右栏：常驻 AT 快捷 + 文件发送 -->
+    <div class="right">
+      <div class="panel" style="flex:1;">
+        <div class="paneltitle">AT 命令（快捷）</div>
+        <div class="at-grid">
+          <button>AT+CGMR</button><button>AT+CPIN?</button>
+          <button>AT+CSQ</button><button>AT+CREG?</button>
+          <button>AT+COPS?</button><button>AT+CNMI=2,1</button>
+        </div>
+        <div class="at-edit">
+          <div class="inp">AT+CFUN?<small>▾</small></div>
+          <button class="btn btn-ghost">添加</button>
+        </div>
+        <div class="at-foot">
+          <button class="btn btn-ghost">发送全部</button>
+          <button class="btn btn-ghost">清空组</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="paneltitle">文件发送</div>
+        <div class="file-row">
+          <div class="inp" style="color:var(--muted);">D:\fw\bin\module.bin</div>
+          <button class="btn btn-ghost">选择…</button>
+        </div>
+        <div class="file-meta"><span>大小 <b style="color:var(--text);">16384 B</b></span>
+          <label style="display:flex;gap:4px;align-items:center;cursor:pointer;color:var(--text);">
+            <input type="checkbox">发送后追加后缀</label></div>
+        <div class="file-ops">
+          <button class="btn btn-primary">发送文件</button>
+          <button class="btn btn-ghost">清空</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span><span class="dot"></span><span class="b">已连接</span> &nbsp;COM3 · 115200-8-N-1</span>
+    <span>发送: <b>0</b> &nbsp;接收: <b>12</b> &nbsp;| UTC+8</span>
+  </div>
+</div>
+</body>
+</html>

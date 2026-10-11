@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+"""BUG B：HEX/DEC/BIN 非法输入应抛 ValueError（send_text 捕获，不崩溃）。
+BUG A：输出框「选择全部」取数路径正确（真实「复制全部→剪贴板」的外部可读性已由独立脚本验证，
+      单测不实测系统剪贴板，因 unittest 进程内剪贴板为全局、会被其它用例污染）。"""
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ecom import codec
+
+try:
+    import tkinter as tk
+    from tkinter import scrolledtext
+    _HAVE_TK = True
+except Exception:
+    _HAVE_TK = False
+
+
+class TestEncodeInvalidInput(unittest.TestCase):
+    def test_bin_rejects_text(self):
+        with self.assertRaises(ValueError):
+            codec.encode('AT+QSTAAPINFO="Edison@#$%是好人"', "BIN", "None")
+
+    def test_dec_rejects_text(self):
+        with self.assertRaises(ValueError):
+            codec.encode("hello", "DEC", "None")
+
+    def test_hex_rejects_odd_length(self):
+        with self.assertRaises(ValueError):
+            codec.encode("ABC", "HEX", "None")
+
+    def test_hex_rejects_nondigit(self):
+        with self.assertRaises(ValueError):
+            codec.encode("ZZ", "HEX", "None")
+
+
+@unittest.skipUnless(_HAVE_TK, "无 tkinter 环境")
+class TestLargeCopy(unittest.TestCase):
+    def test_select_all_get_no_truncation(self):
+        """BUG A 取数路径：输出框「选择全部」后取到的文本无截断/无丢失。"""
+        root = tk.Tk()
+        root.withdraw()
+        st = scrolledtext.ScrolledText(root)
+        st.pack()
+        line = "0123456789 abcdefghijklmnopqrstuvwxyz 中文字符测试\n"
+        big = line * 200000
+        st.insert("1.0", big)
+        st.tag_add("sel", "1.0", "end")
+        text = st.get("sel.first", "sel.last")
+        self.assertGreater(len(text), 1000000)
+        self.assertIn("中文字符测试", text)
+        self.assertTrue(text.rstrip("\n").endswith("中文字符测试"))
+        root.destroy()
+
+
+if __name__ == "__main__":
+    unittest.main()

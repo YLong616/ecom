@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+"""界面小工具：统一控件观感（目前只有「细/扁平滚动条」）。
+
+ttk 滚动条由 ``app._setup_style()`` 里的 TScrollbar 样式统一（全局生效）；
+但 ``scrolledtext.ScrolledText`` 内置的是**经典 ``tk.Scrollbar``**（不走 ttk 样式），
+需要单独 configure —— 用本模块的 ``slim_scrollbar()`` 统一成同一观感。
+"""
+from __future__ import annotations
+
+SLIM_WIDTH = 9          # 细一些（clam 默认约 14-15px）
+
+
+def slim_scrollbar(sb, trough, thumb, hover, width=SLIM_WIDTH):
+    """把经典 tk.Scrollbar 调成细/扁平：细宽度、无立体边框、柔和轨道与滑块色。"""
+    try:
+        sb.configure(width=width, bd=0, relief="flat", highlightthickness=0,
+                     elementborderwidth=0, troughcolor=trough,
+                     background=thumb, activebackground=hover)
+    except Exception:
+        pass
+    return sb
+
+
+def slim_ttk(style, trough, thumb, hover, arrow, text, width=SLIM_WIDTH):
+    """把 ttk 滚动条样式（TScrollbar 及两个方向名）统一成细/扁平。
+
+    clam 主题下 ``-width`` 控制厚度（垂直=宽、水平=高），``-arrowsize`` 控制箭头大小；
+    把 bevel 三色设成轨道色即可去掉立体边框。
+    """
+    for name in ("TScrollbar", "Vertical.TScrollbar", "Horizontal.TScrollbar"):
+        style.configure(name, width=width, arrowsize=width + 2, relief="flat",
+                        borderwidth=0, gripcount=0, background=thumb,
+                        troughcolor=trough, bordercolor=trough,
+                        lightcolor=trough, darkcolor=trough, arrowcolor=arrow)
+        style.map(name,
+                  background=[("pressed", hover), ("active", hover),
+                              ("disabled", trough)],
+                  arrowcolor=[("active", text), ("pressed", text)])

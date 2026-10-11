@@ -1,0 +1,62 @@
+# -*- coding: utf-8 -*-
+"""把源码目录 ecom/ 的模块同步到运行版 site-packages\\ecom（用户 ecom start 实际加载的那份）。
+
+用法:
+    python tools/sync_sitepackages.py           # 只对比，不改动
+    python tools/sync_sitepackages.py --apply   # 同步有差异/缺失的文件，并清理 __pycache__
+"""
+import difflib
+import io
+import os
+import shutil
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, "ecom")
+DST = r"E:\software\python389\lib\site-packages\ecom"
+
+
+def read(p):
+    return io.open(p, encoding="utf-8", errors="replace").read()
+
+
+def main():
+    apply = "--apply" in sys.argv
+    changed = []
+    for f in sorted(os.listdir(SRC)):
+        if not f.endswith(".py"):
+            continue
+        sp = os.path.join(SRC, f)
+        dp = os.path.join(DST, f)
+        if not os.path.exists(dp):
+            print("%-18s MISSING -> copy" % f)
+            changed.append(f)
+            continue
+        a, b = read(sp), read(dp)
+        if a == b:
+            print("%-18s same" % f)
+            continue
+        diff = list(difflib.unified_diff(b.splitlines(), a.splitlines(),
+                                         "site-packages", "source", lineterm="", n=1))
+        print("%-18s DIFF (%d diff lines)" % (f, len(diff)))
+        print("   " + "\n   ".join(diff[:10]))
+        changed.append(f)
+
+    if not apply:
+        print("\n[dry-run] changed files: %s" % (changed or "none"))
+        return
+
+    for f in changed:
+        s = read(os.path.join(SRC, f))
+        with io.open(os.path.join(DST, f), "w", encoding="utf-8", newline="") as fh:
+            fh.write(s)
+        print("synced %s" % f)
+    pyc = os.path.join(DST, "__pycache__")
+    if os.path.isdir(pyc):
+        shutil.rmtree(pyc)
+        print("removed __pycache__")
+    print("done")
+
+
+if __name__ == "__main__":
+    main()

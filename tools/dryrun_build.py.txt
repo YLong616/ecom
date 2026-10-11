@@ -1,0 +1,40 @@
+# -*- coding: utf-8 -*-
+"""按发布手册干跑一遍（不含上传）：清旧产物 -> build --no-isolation -> twine check。"""
+import os
+import shutil
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PY = sys.executable
+
+
+def run(args, **kw):
+    print("$ " + " ".join(args))
+    r = subprocess.run(args, cwd=ROOT, capture_output=True, **kw)
+    out = (r.stdout + r.stderr).decode("utf-8", "replace")
+    tail = "\n".join(out.strip().splitlines()[-14:])
+    print(tail if tail else "(无输出)")
+    print("-> exit", r.returncode)
+    return r.returncode
+
+
+# 清旧产物
+for p in ("dist", "build"):
+    full = os.path.join(ROOT, p)
+    if os.path.isdir(full):
+        shutil.rmtree(full, ignore_errors=True)
+        print("removed", p)
+for name in os.listdir(ROOT):
+    if name.endswith(".egg-info") and os.path.isdir(os.path.join(ROOT, name)):
+        shutil.rmtree(os.path.join(ROOT, name), ignore_errors=True)
+        print("removed", name)
+
+run([PY, "-m", "pip", "install", "--upgrade", "--quiet", "setuptools", "wheel", "build", "twine"])
+rc = run([PY, "-m", "build", "--no-isolation"])
+if rc != 0:
+    sys.exit("构建失败")
+for f in sorted(os.listdir(os.path.join(ROOT, "dist"))):
+    print("  dist/", f, os.path.getsize(os.path.join(ROOT, "dist", f)), "字节")
+run([PY, "-m", "twine", "check"] + [os.path.join("dist", f)
+                                    for f in sorted(os.listdir(os.path.join(ROOT, "dist")))])

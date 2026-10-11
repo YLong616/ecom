@@ -1,0 +1,23 @@
+# -*- coding: utf-8 -*-
+"""按正则查看（E-SafeNet 加密的）源码：python tools/g.py <file> <regex> [start_line] [end_line]
+
+E-SafeNet 下 read_file/findstr 只能看到密文，必须用白名单的 python 进程读明文。
+用本脚本代替 grep，避免 cmd.exe 把多行 -c 代码拆坏。
+    python tools/g.py ecom/app.py "mode_btn|_switch_mode"
+    python tools/g.py ecom/stress_panel.py "" 400 460      # 纯打印行区间
+"""
+import re
+import sys
+
+path, pat = sys.argv[1], sys.argv[2]
+lo = int(sys.argv[3]) if len(sys.argv) > 3 else None
+hi = int(sys.argv[4]) if len(sys.argv) > 4 else None
+rx = re.compile(pat) if pat else None
+lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+print("# %s  (%d lines)" % (path, len(lines)))
+for n, l in enumerate(lines, 1):
+    if rx is not None:
+        if rx.search(l):
+            print("%5d| %s" % (n, l.rstrip()[:160]))
+    elif lo is not None and (hi is None or n <= hi) and n >= lo:
+        print("%5d| %s" % (n, l.rstrip()[:160]))

@@ -1,0 +1,93 @@
+# -*- coding: utf-8 -*-
+"""AT/压力输入框新功能回归：
+- 输入框 undo(Ctrl+Z) 已开启
+- Ctrl+方向键按「单词/分隔符」分段移动（不直跳首尾）
+- Log 按钮合为一个 toggle，文字随状态切换
+- 开始记录时把输出框已有 Log 一并写入文件
+"""
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    import tkinter as tk
+    from ecom.app import EcomApp
+    _HAVE = True
+except Exception:
+    _HAVE = False
+    EcomApp = None
+
+
+@unittest.skipUnless(_HAVE, "无 tkinter / GUI 环境")
+class TestInputFeatures(unittest.TestCase):
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.app = EcomApp(self.root)
+        self.root.update()
+
+    def tearDown(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def test_input_undo_enabled(self):
+        self.assertEqual(self.app.input.cget("undo"), 1)
+
+    def test_word_move_right(self):
+        w = self.app.input
+        w.delete("1.0", "end")
+        w.insert("1.0", 'AT+QPING="10.143.154.246"')
+        w.mark_set("insert", "1.0")                 # 光标在 A 左边
+        self.app._move_word(w, 1)                     # Ctrl+Right
+        self.assertEqual(w.index("insert"), "1.2")    # AT 之后、+ 之前
+
+    def test_word_move_right_to_quote(self):
+        w = self.app.input
+        w.delete("1.0", "end")
+        w.insert("1.0", 'AT+QPING="10.143.154.246"')
+        w.mark_set("insert", "1.5")                  # 在 QPING 中
+        self.app._move_word(w, 1)
+        col = int(w.index("insert").split(".")[1])
+        self.assertGreater(col, 5)                   # 向右跳过单词
+
+    def test_word_move_left(self):
+        w = self.app.input
+        w.delete("1.0", "end")
+        w.insert("1.0", 'AT+QPING="10"')
+        w.mark_set("insert", "1.3")                  # 在 Q 前
+        self.app._move_word(w, -1)                    # Ctrl+Left
+        self.assertEqual(w.index("insert"), "1.2")    # AT 之后
+
+    def test_log_toggle_text_switches(self):
+        btn = self.app.log_btn
+        self.app.logger.stop()
+        self.app._sync_log_state()
+        self.assertEqual(btn.cget("text"), self.app._t("log_start"))
+        # 模拟 active
+        self.app.logger._f = tempfile.NamedTemporaryFile("w", delete=False, suffix=".log", encoding="utf-8")
+        self.app._sync_log_state()
+        self.assertEqual(btn.cget("text"), self.app._t("log_stop"))
+        self.app.logger.stop()
+
+    def test_log_start_dumps_existing_output(self):
+        self.app.output.delete("1.0", "end")
+        self.app.output.insert("1.0", "[2026-01-01_00:00:00]  TX  AT\n[2026-01-01_00:00:01]  RX  OK\n")
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "dump.log")
+            self.app._log_path = path
+            self.app._log_start()
+            # 立刻读取文件，应有已有两行
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("TX  AT", content)
+            self.assertIn("RX  OK", content)
+            self.app._log_stop()
+
+
+if __name__ == "__main__":
+    unittest.main()

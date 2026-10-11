@@ -1,0 +1,918 @@
+"""GUI 主窗口（Tkinter）。
+
+M1：端口 / 波特率 + 完整串口参数 + 打开关闭 + 收发 + 字节计数。
+M1增强：菜单栏(文件/设置) + 中英语言切换。
+M2：编解码(ASCII/HEX/DEC/BIN) + send-on-enter 后缀。
+M3：显示选项（时间戳 / 方向 / \\r\\n / 接收HEX）。
+M4：Log 落盘（菜单「文件 → Log」控制）。
+M5：AT 命令面板（命令组保存/加载/清除）。
+M6：文件加载发送。
+
+视觉主题：浅色界面 + 深色数据区（见 UI_DESIGN.md，方案A）。
+"""
+
+from __future__ import annotations
+
+import datetime
+import time
+import tkinter as tk
+from tkinter import font as tkfont
+from tkinter import scrolledtext
+from tkinter import ttk
+from tkinter import filedialog
+
+from . import codec, i18n
+from .serial_core import SerialCore
+from .logger import Logger
+from .config import Config
+from .at_panel import AtPanel
+from .file_panel import FileSendPanel
+from .tooltip import Tooltip
+
+BAUDRATES = ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
+DATABITS = ["8", "7", "6", "5"]
+PARITY_OPTIONS = ["None (N)", "Even (E)", "Odd (O)", "Mark (M)", "Space (S)"]
+STOPBITS = ["1", "1.5", "2"]
+FLOW_OPTIONS = ["None", "RTS/CTS", "XON/XOFF"]
+
+PARITY_MAP = {
+    "None (N)": "N", "Even (E)": "E", "Odd (O)": "O", "Mark (M)": "M", "Space (S)": "S",
+}
+FLOW_MAP = {"None": (False, False), "RTS/CTS": (True, False), "XON/XOFF": (False, True)}
+
+# 配色（浅色界面 + 深色数据区）
+P = {
+    "bg": "#F2F4F7", "surface": "#FFFFFF", "border": "#D9DEE8",
+    "primary": "#0B57D0", "primary_h": "#0842A0", "secondary": "#ECEFF4",
+    "text": "#1B2733", "muted": "#59657A",
+    "success": "#15803D", "success_h": "#146C33", "danger": "#B3261E",
+    "danger_h": "#8E1E18", "idle": "#9AA4B1",
+    "te_bg": "#101A28", "te_fg": "#DDE4EC", "tx": "#0B57D0", "rx": "#15803D",
+}
+
+
+class EcomApp:
+    def __init__(self, root, language="zh"):
+        self.root = root
+        self.core = SerialCore()
+        self.P = P  # 供子面板取配色
+        self.logger = Logger()
+        self.config = Config()
+        self._status_error = None
+        self._log_path = self.config.get("log", "path", "") or None
+
+        # 语言（config 优先，其次入参）
+        cfg_lang = self.config.get("language") or "zh"
+        self.lang = language if language in i18n.SUPPORTED_LANGUAGES else cfg_lang
+        if cfg_lang in i18n.SUPPORTED_LANGUAGES:
+            self.lang = cfg_lang
+
+        # 键盘/字体
+        self.ui_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.ui_font.configure(size=8)
+        self.menu_font = self.ui_font.copy()
+        self.menu_font.configure(size=12, weight="bold")
+        self.out_font = tkfont.nametofont("TkFixedFont").copy()
+        self.out_font.configure(size=9)
+        self.in_font = tkfont.nametofont("TkFixedFont").copy()
+        self.in_font.configure(size=9)
+
+        root.geometry("1000x850")
+        root.minsize(900, 760)
+        self._text_widgets = []  # [(key, widget)] 语言切换时批量刷新
+        self._mode = "at"
+        self._mode_var = tk.StringVar(value="at")
+        self.stress_view = None
+
+        self._setup_style()
+        self._build_vars()
+        self._build_menu()
+        self._build_widgets()
+        self._bind_close()
+
+        self._apply_language()
+        self._update_counters()
+        self._update_status()
+
+        self._poll_interval_ms = 40
+        # 接收分帧聚合：累积字节，静默 idle 后整体渲染，避免响应被发回显/断片打断
+        self._rx_buf = bytearray()      # 累积的接收字节
+        self._rx_last = 0.0             # 上次有数据的时刻(单调时钟)
+        self._rx_idle_ms = 120          # 静默判定阈值
+        # 热插拔检测：记录当前打开端口名，周期性探测其是否仍在系统串口列表中
+        self._active_port = None            # 当前打开的真实端口名(设备名)
+        self._presence_tick = 0             # 轮询计数，用于分摊探测频率
+        self._presence_check_interval = 15  # 每 15 次轮询(40ms)≈600ms 探测一次存在性
+        self._disconnecting = False         # 防重入标志，避免重复断开
+        self._apply_language_font()
+        self._bind_events()
+        self.root.after(self._poll_interval_ms, self._poll_rx)
+
+    # ---------- 翻译 / 注册 ----------
+    def _t(self, key, **fmt):
+        return i18n.get(self.lang, key, **fmt)
+
+    def _register(self, key, widget):
+        self._text_widgets.append((key, widget))
+
+    # ---------- 主题 ----------
+    def _setup_style(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure(".", background=P["bg"], foreground=P["text"], font=self.ui_font)
+        style.configure("TFrame", background=P["bg"])
+        style.configure("Card.TLabelframe", background=P["surface"],
+                        foreground=P["muted"])
+        style.configure("Card.TLabelframe.Label", background=P["surface"],
+                        foreground=P["muted"])
+        style.configure("TLabel", background=P["bg"], foreground=P["text"])
+        style.configure("Surface.TLabel", background=P["surface"], foreground=P["text"])
+        style.configure("Muted.TLabel", background=P["bg"], foreground=P["muted"])
+        style.configure("MutedSurface.TLabel", background=P["surface"], foreground=P["muted"])
+        style.configure("TButton", background=P["secondary"], foreground=P["text"],
+                        borderwidth=0, focuscolor=P["secondary"], padding=(8, 4))
+        style.map("TButton", background=[("active", "#DFE3EA")])
+        style.configure("Primary.TButton", background=P["primary"], foreground="#ffffff")
+        style.map("Primary.TButton", background=[("active", P["primary_h"])])
+        style.configure("TCombobox", fieldbackground="#fff", background="#fff",
+                        foreground=P["text"], arrowcolor=P["muted"])
+        style.map("TCombobox", fieldbackground=[("readonly", "#fff"), ("disabled", "#EFF2F5")])
+        style.configure("TCheckbutton", background=P["surface"], foreground=P["text"])
+        style.map("TCheckbutton", background=[("active", P["surface"])])
+        style.configure("TNotebook", background=P["bg"], borderwidth=0)
+        style.configure("TNotebook.Tab", background=P["secondary"], padding=(14, 6),
+                        foreground=P["muted"])
+        style.map("TNotebook.Tab",
+                  background=[("selected", P["surface"])],
+                  foreground=[("selected", P["primary"])])
+        style.configure("TEntry", fieldbackground="#fff", foreground=P["text"])
+
+    # ---------- 变量 ----------
+    def _build_vars(self):
+        cfg = self.config.data
+        s = cfg["serial"]
+        self.port_var = tk.StringVar(value=s["port"])
+        self.baud_var = tk.StringVar(value=s["baudrate"])
+        self.databits_var = tk.StringVar(value=s["databits"])
+        self.stopbits_var = tk.StringVar(value=s["stopbits"])
+        self.parity_var = tk.StringVar(value=s["parity"])
+        self.flow_var = tk.StringVar(value=s["flow"])
+        snd = cfg["send"]
+        self.send_type_var = tk.StringVar(value=snd["type"])
+        self.send_suffix_var = tk.StringVar(value=snd["suffix"])
+        self.send_suffix_var.trace_add("write", lambda *_: self._on_suffix_changed())
+        d = cfg["display"]
+        self.show_ts = tk.BooleanVar(value=bool(d["timestamp"]))
+        self.show_dir = tk.BooleanVar(value=bool(d["direction"]))
+        self.show_crlf = tk.BooleanVar(value=bool(d["crlf"]))
+        self.show_hex = tk.BooleanVar(value=bool(d["hex"]))
+        self.dtr_var = tk.BooleanVar(value=False)   # 勾选=拉低(False)
+        self.rts_var = tk.BooleanVar(value=False)   # 勾选=拉低(False)
+        self.dtr_var.trace_add("write", lambda *_: self._apply_dtr_rts())
+        self.rts_var.trace_add("write", lambda *_: self._apply_dtr_rts())
+        self._port_map = {}  # display -> device 映射
+
+    def _on_suffix_changed(self):
+        # 发送后缀仅用于 send-on-enter 编解码，文件面板不再显示「追加后缀」，
+        # 故此处无需联动（保留空实现避免 trace 回调报错）。
+        pass
+
+    def _apply_dtr_rts(self):
+        self.core.set_dtr(self.dtr_var.get())
+        self.core.set_rts(self.rts_var.get())
+
+    # ---------- 事件 / 字体 ----------
+    def _apply_language_font(self):
+        """把当前 mono_font 应用到输入/输出框（供语言/缩放联动）。"""
+        try:
+            self.output.configure(font=self.out_font)
+            self.input.configure(font=self.in_font)
+        except tk.TclError:
+            pass
+
+    def _clamp_output(self):
+        """字体缩放后保持输出框行高不变，避免撑大组件布局。"""
+        try:
+            self.output.configure(height=22)
+        except tk.TclError:
+            pass
+
+    def _bind_events(self):
+        """Ctrl+滚轮缩放输出/输入字体（独立字体，互不影响）；输入框 Enter 发送。"""
+        def make_wheel(fontob, widget):
+            def on_wheel(event):
+                if event.state & 0x0004:  # Ctrl
+                    delta = 1 if event.delta > 0 else -1
+                    size = max(8, min(28, fontob.cget("size") + delta))
+                    if size != fontob.cget("size"):
+                        fontob.configure(size=size)
+                        widget.configure(font=fontob)
+                    return "break"
+                return None
+            return on_wheel
+
+        def on_enter(event):
+            self._send()
+            return "break"
+
+        self.output.bind("<Control-MouseWheel>", make_wheel(self.out_font, self.output))
+        self.output.bind("<Control-Button-4>", lambda e, f=self.out_font, w=self.output: self._zoom_font(f, w, 1))
+        self.output.bind("<Control-Button-5>", lambda e, f=self.out_font, w=self.output: self._zoom_font(f, w, -1))
+        self.input.bind("<Control-MouseWheel>", make_wheel(self.in_font, self.input))
+        self.input.bind("<Control-Button-4>", lambda e, f=self.in_font, w=self.input: self._zoom_font(f, w, 1))
+        self.input.bind("<Control-Button-5>", lambda e, f=self.in_font, w=self.input: self._zoom_font(f, w, -1))
+        self.input.bind("<Return>", on_enter)
+        self.input.bind("<KP_Enter>", on_enter)
+
+    def _zoom_font(self, fontob, widget, delta):
+        size = max(8, min(28, fontob.cget("size") + delta))
+        if size != fontob.cget("size"):
+            fontob.configure(size=size)
+            widget.configure(font=fontob)
+
+    def _build_menu(self):
+        # 下拉菜单本体（点击「设置」标题按钮时弹出）
+        self.settings_menu = tk.Menu(self.root, tearoff=0, font=self.ui_font)
+        self.lang_menu = tk.Menu(self.settings_menu, tearoff=0, font=self.ui_font)
+        self._lang_var = tk.StringVar(value=self.lang)
+        for code in i18n.SUPPORTED_LANGUAGES:
+            self.lang_menu.add_radiobutton(
+                label=i18n.lang_label(code), value=code, variable=self._lang_var,
+                command=lambda c=code: self._set_language(c))
+        self.settings_menu.add_cascade(label=self._t("menu_language"), menu=self.lang_menu)
+        self.settings_menu.add_separator()
+        self.settings_menu.add_command(label=self._t("menu_exit"), command=self._on_close)
+
+        # 模式切换菜单（AT / 压力）
+        self.mode_menu = tk.Menu(self.root, tearoff=0, font=self.ui_font)
+        for code, lbl in (("at", "mode_at"), ("stress", "mode_stress")):
+            self.mode_menu.add_radiobutton(label=self._t(lbl), value=code,
+                                           variable=self._mode_var,
+                                           command=lambda c=code: self._switch_mode(c))
+
+        # 顶部标题栏：左侧「设置」大字标题按钮；左间距与「串口配置」标题对齐；下方留出间距
+        if getattr(self, "_header_built", None) is None:
+            self.header = ttk.Frame(self.root, style="TFrame")
+            self.header.pack(side="top", fill="x", padx=0, pady=(0, 6))
+            self.settings_btn = ttk.Label(self.header, text=self._t("menu_settings"),
+                                          font=self.menu_font, cursor="hand2")
+            self.settings_btn.pack(side="left", padx=(10, 6), pady=(8, 6))
+            self.settings_btn.bind("<Button-1>", self._popup_settings)
+            self._register("menu_settings", self.settings_btn)
+            self.mode_btn = ttk.Label(self.header, text=self._t("mode_at"),
+                                      font=self.menu_font, cursor="hand2")
+            self.mode_btn.pack(side="left", padx=(0, 6), pady=(8, 6))
+            self.mode_btn.bind("<Button-1>", self._popup_mode)
+            self._header_built = True
+        else:
+            self.settings_btn.config(text=self._t("menu_settings"))
+
+    def _popup_settings(self, event=None):
+        try:
+            self.settings_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.settings_menu.grab_release()
+
+    def _popup_mode(self, event=None):
+        try:
+            self.mode_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.mode_menu.grab_release()
+
+    def _get_stress_view(self):
+        if getattr(self, "stress_view", None) is None:
+            from .stress_panel import StressPanel
+            self.stress_view = StressPanel(self.content, self)
+        return self.stress_view
+
+    def _switch_mode(self, mode):
+        if mode == self._mode:
+            return
+        if mode == "stress":
+            self.at_view.pack_forget()
+            sv = self._get_stress_view()
+            sv.pack(fill="both", expand=True)
+        else:
+            if getattr(self, "stress_view", None) is not None:
+                try:
+                    self.stress_view._stop_run()
+                except Exception:
+                    pass
+                self.stress_view.pack_forget()
+            self.at_view.pack(fill="both", expand=True)
+        self._mode = mode
+        self._mode_var.set(mode)
+        self.mode_btn.config(text=self._t("mode_" + mode))
+
+    def _build_widgets(self):
+        self._build_body()
+        self._build_statusbar()
+
+    def _label(self, parent, key, **kw):
+        w = ttk.Label(parent, text=self._t(key), **kw)
+        self._register(key, w)
+        return w
+
+    def _button(self, parent, key, command, style=None, **kw):
+        w = ttk.Button(parent, text=self._t(key), command=command)
+        if style:
+            w.configure(style=style)
+        self._register(key, w)
+        if kw:
+            w.pack(**kw)
+        else:
+            w.pack()
+        return w
+
+    # 串口配置卡
+    def _build_serial_card(self, parent):
+        box = ttk.LabelFrame(parent, text=self._t("serial_settings"), style="Card.TLabelframe")
+        self._register("serial_settings", box)
+        box.pack(fill="x", pady=(0, 4))
+        self._populate_serial_card(box)
+
+    def _populate_serial_card(self, box):
+        # 第一行 Frame：端口 / 波特率 / 数据位（左） + 刷新 / 打开串口（右）
+        top = ttk.Frame(box, style="Surface.TFrame")
+        top.pack(fill="x", padx=4, pady=(6, 0))
+        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, width=18)
+        self._field_pack(top, "port", self.port_combo)
+        self.baud_combo = ttk.Combobox(top, textvariable=self.baud_var, values=BAUDRATES, width=7)
+        self._field_pack(top, "baudrate", self.baud_combo)
+        self.databits_combo = ttk.Combobox(top, textvariable=self.databits_var, values=DATABITS, width=6)
+        self._field_pack(top, "databits", self.databits_combo)
+
+        ops = ttk.Frame(top, style="Surface.TFrame")
+        ops.pack(side="right", padx=(8, 0), pady=0)
+        refresh = ttk.Button(ops, text=self._t("refresh"), command=self._refresh_ports)
+        refresh.pack(fill="x", padx=(0, 2), pady=(0, 4))
+        self._register("refresh", refresh)
+        self.open_btn = ttk.Button(ops, text=self._t("open"), command=self._toggle_port,
+                                   style="Primary.TButton")
+        self.open_btn.pack(fill="x", padx=(0, 2))
+        self._register("open", self.open_btn)
+
+        # 第二行 Frame：停止位 / 校验位 / 流控
+        row1 = ttk.Frame(box, style="Surface.TFrame")
+        row1.pack(fill="x", padx=4, pady=(2, 0))
+        self.stopbits_combo = ttk.Combobox(row1, textvariable=self.stopbits_var, values=STOPBITS, width=6)
+        self._field_pack(row1, "stopbits", self.stopbits_combo)
+        self.parity_combo = ttk.Combobox(row1, textvariable=self.parity_var, values=PARITY_OPTIONS, width=9)
+        self._field_pack(row1, "parity", self.parity_combo)
+        self.flow_combo = ttk.Combobox(row1, textvariable=self.flow_var, values=FLOW_OPTIONS, width=9)
+        self._field_pack(row1, "flow", self.flow_combo)
+
+        # 计数行：已发送 / 已接收 / 清零计数
+        row2 = ttk.Frame(box, style="Surface.TFrame")
+        row2.pack(fill="x", padx=4, pady=(6, 8))
+        self.monitor_tx = ttk.Label(row2, text=self._t("tx", n=0), style="MutedSurface.TLabel")
+        self.monitor_tx.pack(side="left")
+        self.monitor_rx = ttk.Label(row2, text=self._t("rx", n=0), style="MutedSurface.TLabel")
+        self.monitor_rx.pack(side="left", padx=(24, 0))
+        clear = ttk.Button(row2, text=self._t("clear_counters"), command=self._clear_counters)
+        clear.pack(side="right")
+        self._register("clear_counters", clear)
+
+    def _field_pack(self, parent, label_key, widget):
+        """标签与控件在同一行、同容器内并排。
+        标签左侧留 14px 空隙，与上一个下拉框隔开（波特率/数据位/停止位 等不拥挤）；
+        标签右侧 3px，紧贴自己的下拉框。"""
+        self._label(parent, label_key, style="MutedSurface.TLabel").pack(side="left", padx=(14, 3))
+        widget.pack(side="left")
+
+    def _field(self, box, row, label_col, label_key, widget):
+        """标签右对齐 + 控件左对齐，紧凑间距（参考输入框下方「类型」）。"""
+        self._label(box, label_key, style="MutedSurface.TLabel").grid(row=row, column=label_col,
+                                         padx=(4, 4), pady=6, sticky="e")
+        widget.grid(row=row, column=label_col + 1, padx=(8, 16), pady=6, sticky="w")
+
+    def _build_body(self):
+        self.content = ttk.Frame(self.root, style="TFrame")
+        self.content.pack(fill="both", expand=True, padx=10, pady=(2, 5))
+        body = ttk.Frame(self.content, style="TFrame")
+        body.pack(fill="both", expand=True)
+        self.at_view = body
+        body.columnconfigure(0, weight=1, minsize=520)
+        body.columnconfigure(1, weight=2, minsize=340)
+        body.rowconfigure(0, weight=1)
+
+        # 左栏（0 列）：串口配置 + 输入输出（监控）
+        left = ttk.Frame(body, style="TFrame")
+        left.grid(row=0, column=0, sticky="nsew")
+        self._build_serial_card(left)
+        self._build_monitor(left)
+
+        # 右栏（1 列）：常驻快捷 AT 命令组（占满高度，随窗口拉伸）
+        self.sidebar = ttk.Frame(body, style="TFrame")
+        self.sidebar.grid(row=0, column=1, sticky="nsew", padx=(18, 0))
+        self.sidebar.grid_rowconfigure(0, weight=1)
+        self.sidebar.grid_columnconfigure(0, weight=1)
+        self.at_panel = AtPanel(self.sidebar, self)
+        self.at_panel.grid(row=0, column=0, sticky="nsew")
+        self._tab_at = self.at_panel
+
+    def _build_monitor(self, parent):
+        # 输出区（默认白底，数据统一黑色）
+        out = ttk.LabelFrame(parent, text=self._t("output"), style="Card.TLabelframe")
+        self._register("output", out)
+        out.pack(fill="both", expand=True, padx=0, pady=4)
+        self.output = scrolledtext.ScrolledText(
+            out, font=self.out_font, wrap="word", height=18,
+            bg="#FFFFFF", fg="#1B2733", insertbackground="#1B2733",
+            relief="flat", borderwidth=0, state="normal",
+            highlightthickness=1, highlightbackground=P["border"], highlightcolor=P["border"])
+        self.output.pack(fill="both", expand=True, padx=6, pady=6)
+        self.output.bind("<Configure>", lambda e: self._clamp_output())
+        self._install_select_menu(self.output)
+        self.output.tag_configure("tx", foreground=P["tx"])
+        self.output.tag_configure("rx", foreground=P["rx"])
+
+        # 输入区（高度=2 行，字体放大）
+        inp = ttk.LabelFrame(parent, text=self._t("input"), style="Card.TLabelframe")
+        self._register("input", inp)
+        inp.pack(fill="x", padx=0, pady=4)
+        self.input = scrolledtext.ScrolledText(
+            inp, font=self.in_font, wrap="none",
+            bg="#FFFFFF", fg="#1B2733", insertbackground="#1B2733",
+            relief="flat", borderwidth=0, height=3,
+            highlightthickness=1, highlightbackground=P["border"], highlightcolor=P["border"])
+        self.input.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # 发送行（第 1 行）：类型 / 后缀 / 发送 / 清空
+        bar = ttk.Frame(inp)
+        bar.pack(fill="x", padx=6, pady=(0, 2))
+        ttk.Label(bar, text=self._t("send_type"), style="Muted.TLabel").pack(side="left", padx=(4, 4))
+        ttk.Combobox(bar, textvariable=self.send_type_var, values=codec.SEND_TYPES,
+                     width=7, state="readonly").pack(side="left")
+        ttk.Label(bar, text=self._t("send_suffix"), style="Muted.TLabel").pack(side="left", padx=(8, 4))
+        ttk.Combobox(bar, textvariable=self.send_suffix_var, values=codec.SUFFIXES,
+                     width=8, state="readonly").pack(side="left")
+        send_btn = ttk.Button(bar, text=self._t("send"), command=self._send, style="Primary.TButton")
+        send_btn.pack(side="right", padx=(12, 2))
+        self._register("send", send_btn)
+        clr_in = ttk.Button(bar, text=self._t("clear_input"), command=self._clear_input)
+        clr_in.pack(side="right", padx=(8, 0))
+        clr_out = ttk.Button(bar, text=self._t("clear_output"), command=self._clear_output)
+        clr_out.pack(side="right", padx=(8, 0))
+
+        # 显示选项 + DTR/RTS（第 2 行，单独一行，换行显示）
+        opt = ttk.Frame(inp)
+        opt.pack(fill="x", padx=6, pady=(2, 6))
+        # 显示选项行：显示选项(左) + 分隔线 + DTR/RTS(右)，规整分组
+        for key, var in [("display_timestamp", self.show_ts), ("display_direction", self.show_dir),
+                         ("display_crlf", self.show_crlf), ("display_hex", self.show_hex)]:
+            chk = tk.Checkbutton(opt, text=self._t(key), variable=var,
+                                 font=self.ui_font, bg=P["surface"], fg=P["text"],
+                                 activebackground=P["surface"], activeforeground=P["text"],
+                                 selectcolor=P["surface"], highlightthickness=0, bd=0)
+            self._register(key, chk)
+            chk.pack(side="left", padx=(6, 0))
+        ttk.Separator(opt, orient="vertical").pack(side="left", fill="y", padx=(12, 12), pady=2)
+        for key, var in [("dtr", self.dtr_var), ("rts", self.rts_var)]:
+            chk = tk.Checkbutton(opt, text=self._t(key), variable=var,
+                                 font=self.ui_font, bg=P["surface"], fg=P["text"],
+                                 activebackground=P["surface"], activeforeground=P["text"],
+                                 selectcolor=P["surface"], highlightthickness=0, bd=0)
+            self._register(key, chk)
+            chk.pack(side="left", padx=(6, 0))
+
+        # 文件发送行（输入框下方，整行）
+        self.file_panel = FileSendPanel(parent, self)
+        self.file_panel.pack(fill="x", padx=0, pady=(2, 2))
+
+        # Log 保存行（文件发送下方，整行，去掉外层线框）
+        self._build_log_row(parent)
+
+    def _build_log_row(self, parent):
+        row = ttk.Frame(parent, style="TFrame")
+        row.pack(fill="x", padx=0, pady=(1, 2))
+        ttk.Label(row, text=self._t("log_config"), style="Muted.TLabel").pack(side="left", padx=(2, 6))
+        self.log_path_var = tk.StringVar(value=self._log_path or "")
+        ent = ttk.Entry(row, textvariable=self.log_path_var, state="readonly")
+        ent.pack(side="left", fill="x", expand=True, padx=(0, 6), pady=2)
+        self._log_entry = ent
+        # 悬浮看到完整路径（组件尺寸不变）
+        Tooltip(ent, text=lambda: self.log_path_var.get() or "")
+        btn_sel = ttk.Button(row, text=self._t("log_select"), command=self._choose_log)
+        btn_sel.pack(side="left", padx=(0, 4))
+        self._register("log_select", btn_sel)
+        # 悬浮在「选择Log文件」按钮上也显示当前路径
+        Tooltip(btn_sel, text=lambda: self.log_path_var.get() or self._t("log_off"))
+        btn_start = ttk.Button(row, text=self._t("log_start"), command=self._log_start)
+        btn_start.pack(side="left", padx=(0, 4))
+        self._register("log_start", btn_start)
+        btn_stop = ttk.Button(row, text=self._t("log_stop"), command=self._log_stop)
+        btn_stop.pack(side="left", padx=(0, 4))
+        self._register("log_stop", btn_stop)
+        self.log_state_lbl = ttk.Label(row, text=self._t("log_off"), style="Muted.TLabel")
+        self.log_state_lbl.pack(side="left", padx=(0, 6))
+
+    def _build_statusbar(self):
+        bar = ttk.Frame(self.root, style="TFrame")
+        bar.pack(side="bottom", fill="x")
+
+        left = ttk.Frame(bar)
+        left.pack(side="left", padx=10, pady=4)
+        self.dot = tk.Canvas(left, width=12, height=12, bg=P["bg"], highlightthickness=0)
+        self.dot.pack(side="left", padx=(0, 6))
+        self.status_label = ttk.Label(left, text=self._t("status_idle"), style="Muted.TLabel")
+        self.status_label.pack(side="left")
+        self.connect_summary = ttk.Label(left, text="--", style="Muted.TLabel")
+        self.connect_summary.pack(side="left", padx=(12, 0))
+
+        right = ttk.Frame(bar)
+        right.pack(side="right", padx=10)
+        self.status_tx = ttk.Label(right, text="TX 0", style="Muted.TLabel")
+        self.status_tx.pack(side="left", padx=(0, 12))
+        self.status_rx = ttk.Label(right, text="RX 0", style="Muted.TLabel")
+        self.status_rx.pack(side="left", padx=(0, 12))
+        self.tz_label = ttk.Label(right, text="UTC+8", style="Muted.TLabel")
+        self.tz_label.pack(side="left")
+
+    def _set_language(self, code):
+        self.lang = code
+        self._lang_var.set(code)
+        self._build_menu()
+        self._apply_language()
+        self._update_counters()
+        self._update_status()
+        self.config.data["language"] = code
+
+    def _apply_language(self):
+        self.root.title(self._t("app_title"))
+        for key, widget in self._text_widgets:
+            try:
+                if isinstance(widget, ttk.LabelFrame):
+                    widget.configure(text=self._t(key))
+                elif isinstance(widget, (ttk.Label, ttk.Button, ttk.Checkbutton, tk.Checkbutton, ttk.Radiobutton)):
+                    widget.configure(text=self._t(key))
+            except tk.TclError:
+                pass
+        self.open_btn.configure(text=self._t("close") if self.core.is_open else self._t("open"))
+        if getattr(self, "mode_btn", None) is not None:
+            self.mode_btn.config(text=self._t("mode_" + self._mode))
+        self._sync_log_state()
+        _sv = getattr(self, "stress_view", None)
+        if _sv is not None:
+            try:
+                _sv._refresh_language()
+            except Exception:
+                pass
+
+    def _sync_log_state(self):
+        self.log_state_lbl.config(text=self._t("log_on") if self.logger.active else self._t("log_off"))
+
+    # ---------- 串口操作 ----------
+    def _refresh_ports(self, flash=True):
+        self._port_map = {}
+        displays = []
+        for device, display in self.core.list_ports():
+            self._port_map[display] = device
+            displays.append(display)
+        self.port_combo["values"] = displays
+        cur = self.port_var.get()
+        if cur not in displays:
+            matched = next((d for d, dev in self._port_map.items()
+                            if dev == cur or d == cur), None)
+            self.port_var.set(matched if matched else "")
+        # 刷新成功：端口框未选中时自动选中第一个，并在状态栏提示
+        if displays and not self.port_var.get():
+            self.port_var.set(displays[0])
+        if displays and flash:
+            self._flash_status(self._t("refresh_ok", n=len(displays)))
+
+    def _gather_params(self):
+        baud = int(self.baud_var.get())
+        data_bits = int(self.databits_var.get())
+        parity = PARITY_MAP[self.parity_var.get()]
+        stop_bits = float(self.stopbits_var.get())
+        rtscts, xonxoff = FLOW_MAP[self.flow_var.get()]
+        return baud, data_bits, parity, stop_bits, rtscts, xonxoff
+
+    def _toggle_port(self):
+        if self.core.is_open:
+            self.core.close()
+            self._active_port = None
+            self._status_error = None
+            self._update_status()
+            return
+        display = self.port_var.get().strip()
+        if not display:
+            self._append_input_msg(self._t("no_port") + "\n")
+            return
+        port = self._port_map.get(display, display)
+        try:
+            baud, data_bits, parity, stop_bits, rtscts, xonxoff = self._gather_params()
+            self.core.open(port, baudrate=baud, bytesize=data_bits, parity=parity,
+                           stopbits=stop_bits, rtscts=rtscts, xonxoff=xonxoff)
+            self._active_port = port
+            self._disconnecting = False
+            self._presence_tick = 0
+            self._apply_dtr_rts()
+            self._status_error = None
+            self._update_status()
+        except Exception as exc:
+            self._append_input_msg(self._t("open_fail", e=exc) + "\n")
+            self._set_status_error(str(exc))
+
+    def _send(self):
+        text = self.input.get("1.0", "end-1c")
+        self.send_text(text)
+
+    def send_text(self, text):
+        raw = codec.encode(text, self.send_type_var.get(), self.send_suffix_var.get())
+        return self.send_bytes(raw)
+
+    def send_bytes(self, raw):
+        if not raw:
+            return 0
+        if not self.core.is_open:
+            self._append_input_msg(self._t("no_port") + "\n")
+            return 0
+        try:
+            n = self.core.write(raw)
+            self._append_line("TX", raw)
+            self._rx_last = time.monotonic()
+            return n
+        except Exception as exc:
+            self._append_input_msg(self._t("send_fail", e=exc) + "\n")
+            return 0
+
+    # ---------- 接收轮询 ----------
+    def _poll_rx(self):
+        import time as _t
+        try:
+            got = False
+            for kind, payload in self.core.drain():
+                if kind == SerialCore.RX_DATA:
+                    self._rx_buf.extend(payload)
+                    got = True
+                elif kind == SerialCore.RX_ERROR:
+                    self._on_port_lost(str(payload))
+                elif kind == SerialCore.RX_CLOSED:
+                    self._on_port_lost()
+            if got:
+                self._rx_last = _t.monotonic()
+            # 静默超时 → 整体渲染这一帧
+            if self._rx_buf and (_t.monotonic() - self._rx_last) * 1000 >= self._rx_idle_ms:
+                self._flush_rx()
+            # 周期性探测：串口被拔出/设备消失时主动断开，恢复为“打开串口”
+            if self.core.is_open and self._active_port:
+                self._presence_tick += 1
+                if self._presence_tick >= self._presence_check_interval:
+                    self._presence_tick = 0
+                    self._check_port_presence()
+        finally:
+            self._update_counters()
+            self.root.after(self._poll_interval_ms, self._poll_rx)
+
+    def _append_interp(self, text):
+        """在输出区追加纯文本（禁用 insert 状态，辅助函数内部处理）。"""
+        try:
+            self.output.insert("end", text)
+        except tk.TclError:
+            return
+
+    def _render_frame(self, direction, raw):
+        """渲染一条完整消息（TX 或聚合后的 RX），统一黑色。"""
+        now = time.time()
+        dt = datetime.datetime.now()
+        ts = "[%s:%03d]" % (dt.strftime("%Y-%m-%d_%H:%M:%S"), dt.microsecond // 1000)
+        parts = []
+        if self.show_ts.get():
+            parts.append(ts)
+        if self.show_dir.get():
+            parts.append(direction)
+        body = codec.decode_display(raw, self.show_hex.get())
+        if self.show_crlf.get():
+            body = codec.escape_control(body)
+        if body:
+            parts.append(body)
+        line = "  ".join(parts) + "\n"
+        try:
+            self.output.insert("end", line)
+            self.output.see("end")
+        except tk.TclError:
+            return
+        # Log 与输出框逐字节一致：把渲染进输出框的那一行原样写入（去掉末尾换行）
+        if self.logger.active and direction in ("TX", "RX"):
+            self.logger.log(line.rstrip("\n"))
+
+    def _flush_rx(self):
+        """若接收缓冲非空，按换行拆分为多条 RX（每行独立时间戳）并清空。"""
+        if self._rx_buf:
+            data = bytes(self._rx_buf)
+            self._rx_buf.clear()
+            while True:
+                idx = data.find(b"\n")
+                if idx < 0:
+                    if data:
+                        self._render_frame("RX", data)
+                    break
+                self._render_frame("RX", data[:idx + 1])
+                data = data[idx + 1:]
+
+    def _append_line(self, direction, raw):
+        """TX 入口：先冲刷未渲染的 RX 缓冲，避免 TX 插到 RX 中间。"""
+        if direction == "TX":
+            self._flush_rx()
+        self._render_frame(direction, raw)
+
+    def _append_input_msg(self, text):
+        try:
+            self.input.configure(state="normal")
+            self.input.insert("end", text)
+            self.input.see("end")
+        finally:
+            self.input.configure(state="normal")
+
+    # ---------- 状态 ----------
+    def _set_dot(self, color):
+        self.dot.delete("all")
+        self.dot.create_oval(2, 2, 11, 11, fill=color, outline=color)
+
+    def _set_status_error(self, msg):
+        self._status_error = msg
+        self._set_dot(P["danger"])
+        self.status_label.config(text=self._t("status_error", e=msg))
+        self.open_btn.configure(text=self._t("open"))
+
+    def _update_status(self):
+        if self.core.is_open:
+            self._set_dot(P["success"])
+            self.status_label.config(text=self._t("status_connected"))
+            device = self._port_map.get(self.port_var.get(), self.port_var.get())
+            summary = (f"{device} · {self.baud_var.get()}-{self.databits_var.get()}-"
+                       f"{PARITY_MAP[self.parity_var.get()]}-{self.stopbits_var.get()}")
+            self.connect_summary.config(text=summary)
+            self.open_btn.configure(text=self._t("close"))
+        else:
+            self._set_dot(P["danger"] if self._status_error else P["idle"])
+            self.status_label.config(
+                text=self._t("status_error", e=self._status_error) if self._status_error
+                else self._t("status_disconnected"))
+            self.connect_summary.config(text="--")
+            self.open_btn.configure(text=self._t("open"))
+
+    def _check_port_presence(self):
+        """打开期间定期探测当前端口是否仍在系统串口列表中。"""
+        port = self._active_port
+        if not port:
+            return
+        # loop:// 等虚拟端口不被 list_ports 枚举，跳过探测，避免误判断开
+        if "://" in port:
+            return
+        present = any(dev == port for dev, _ in self.core.list_ports())
+        if not present:
+            self._on_port_lost(self._t("port_lost"))
+
+    def _on_port_lost(self, reason=None):
+        """设备被移除/读写失效 -> 主动断开连接，恢复为“打开串口”。"""
+        if self._disconnecting:
+            return
+        self._disconnecting = True
+        try:
+            self.core.close()
+            self._active_port = None
+            self._flush_rx()
+            msg = reason or self._t("port_lost")
+            self._append_input_msg(msg + "\n")
+            self._set_status_error(msg)
+            self._refresh_ports(flash=False)   # 下拉框同步移除已失效端口
+            self._update_status()
+        finally:
+            self._disconnecting = False
+
+    def _flash_status(self, msg, ms=2200):
+        """状态栏临时显示一条消息，几秒后恢复为真实连接状态。"""
+        try:
+            if getattr(self, "_flash_job", None):
+                self.root.after_cancel(self._flash_job)
+        except tk.TclError:
+            pass
+        self.status_label.config(text=msg)
+        self._flash_job = self.root.after(ms, self._update_status)
+
+    def _update_counters(self):
+        tx, rx = self.core.tx_count, self.core.rx_count
+        self.monitor_tx.config(text=self._t("tx", n=tx) + " " + self._t("byte"))
+        self.monitor_rx.config(text=self._t("rx", n=rx) + " " + self._t("byte"))
+        self.status_tx.config(text=f"TX {tx}")
+        self.status_rx.config(text=f"RX {rx}")
+
+    # ---------- 计数 / 清空 ----------
+    def _clear_counters(self):
+        self.core.reset_counters()
+        self._update_counters()
+
+    # ---------- 文本可复制（右键菜单 / Ctrl+A / Ctrl+C；只读但可选中） ----------
+    def _install_select_menu(self, widget):
+        menu = tk.Menu(widget, tearoff=0)
+        menu.add_command(label=self._t("copy"), command=lambda: self._copy_selection(widget))
+        menu.add_command(label=self._t("select_all"), command=lambda: self._select_all(widget))
+        menu.add_command(label=self._t("copy_all"), command=lambda: self._copy_all(widget))
+        widget._ctx_menu = menu  # 持有引用，避免被 GC
+        widget.bind("<Button-3>", lambda e: menu.tk_popup(e.x_root, e.y_root))
+        widget.bind("<Control-a>", lambda e: self._select_all(widget))
+        widget.bind("<Control-c>", lambda e: self._copy_selection(widget))
+        # 输出框只读但可选中：放行 Ctrl 组合（复制/全选），拦截一切键入
+        widget.bind("<KeyPress>", self._readonly_key)
+
+    def _readonly_key(self, event):
+        """输出框只读策略：Ctrl 组合键（复制/全选）放行，其余键入一律拦截。"""
+        if event.state & 0x0004:  # ControlMask
+            return None
+        return "break"
+
+    def _copy_selection(self, widget):
+        try:
+            text = widget.get("sel.first", "sel.last")
+        except tk.TclError:
+            text = ""
+        if text:
+            widget.clipboard_clear()
+            widget.clipboard_append(text)
+
+    def _select_all(self, widget):
+        try:
+            widget.tag_add("sel", "1.0", "end")
+        except tk.TclError:
+            pass
+
+    def _copy_all(self, widget):
+        try:
+            text = widget.get("1.0", "end-1c")
+        except tk.TclError:
+            text = ""
+        if text:
+            widget.clipboard_clear()
+            widget.clipboard_append(text)
+
+    def _clear_output(self):
+        self.output.delete("1.0", "end")
+
+    def _clear_input(self):
+        self.input.delete("1.0", "end")
+
+    # ---------- Log ----------
+    def _choose_log(self):
+        path = filedialog.asksaveasfilename(
+            title=self._t("log_select"), defaultextension=".log",
+            initialfile=f"ecom_{datetime.datetime.now():%Y%m%d_%H%M%S}.log")
+        if path:
+            self._log_path = path
+            self.log_path_var.set(path)
+            self.config.set("log", "path", path)
+
+    def _log_start(self):
+        if not self._log_path:
+            self._choose_log()
+        if not self._log_path:
+            return
+        if self.logger.start(self._log_path):
+            self._sync_log_state()
+        else:
+            self._append_input_msg(self._t("log_off") + "\n")
+
+    def _log_stop(self):
+        if self.logger.active:
+            self.logger.stop()
+            self._sync_log_state()
+
+    # ---------- 关闭 ----------
+    def _bind_close(self):
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _save_config(self):
+        cfg = self.config.data
+        cfg["serial"].update({
+            "port": self.port_var.get(), "baudrate": self.baud_var.get(),
+            "databits": self.databits_var.get(), "stopbits": self.stopbits_var.get(),
+            "parity": self.parity_var.get(), "flow": self.flow_var.get()})
+        cfg["display"].update({
+            "timestamp": bool(self.show_ts.get()), "direction": bool(self.show_dir.get()),
+            "crlf": bool(self.show_crlf.get()), "hex": bool(self.show_hex.get())})
+        cfg["send"].update({
+            "type": self.send_type_var.get(), "suffix": self.send_suffix_var.get()})
+        cfg["language"] = self.lang
+        try:
+            self.config.save()
+        except OSError:
+            pass
+
+    def _on_close(self):
+        try:
+            self.logger.stop()
+        finally:
+            self._save_config()
+            self.core.close()
+            self.root.destroy()
+
+
+def run():
+    root = tk.Tk()
+    EcomApp(root, language="zh")
+    root.mainloop()

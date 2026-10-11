@@ -1,0 +1,51 @@
+# -*- coding: utf-8 -*-
+"""对「安装版」ecom（site-packages）做端到端验收：复制全部 -> 主线程忙等 -> 外部进程读取。"""
+import os
+import subprocess
+import sys
+import time
+import tkinter as tk
+
+import ecom
+from ecom.app import EcomApp
+
+print("package:", ecom.__file__)
+assert "site-packages" in ecom.__file__, "必须验证安装版，不是源码目录"
+import ecom.app as am
+assert not hasattr(am, "_clipboard_set"), "安装版仍残留进程内 Win32 写入"
+assert hasattr(am.EcomApp, "_on_copy_key"), "安装版缺少 _on_copy_key"
+
+root = tk.Tk()
+root.withdraw()
+app = EcomApp(root)
+root.update()
+
+app.output.delete("1.0", "end")
+app.output.insert("1.0", "[2026-09-29_19:30:00:000]  RX  OK\n" * 4000)
+import tkinter.messagebox as mb
+mb.showinfo = lambda *a, **k: None
+app._copy_all(app.output)
+root.update()
+expected = len(app.output.get("1.0", "end-1c"))
+
+end = time.time() + 1.5
+while time.time() < end:          # 忙等：模拟持续收 Log
+    pass
+
+reader = (
+    "import ctypes, ctypes.wintypes as wt\n"
+    "u=ctypes.windll.user32; k=ctypes.windll.kernel32; H=ctypes.c_void_p\n"
+    "u.OpenClipboard.argtypes=[H]; u.OpenClipboard.restype=wt.BOOL\n"
+    "u.GetClipboardData.argtypes=[ctypes.c_uint]; u.GetClipboardData.restype=H\n"
+    "k.GlobalLock.argtypes=[H]; k.GlobalLock.restype=H\n"
+    "u.OpenClipboard(None); h=u.GetClipboardData(13)\n"
+    "s=ctypes.wstring_at(k.GlobalLock(h)) if h else ''\n"
+    "u.CloseClipboard(); print(len(s))\n"
+)
+out = subprocess.run([sys.executable, "-c", reader], stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE, timeout=60)
+got = int(out.stdout.decode().strip()) if out.returncode == 0 else -1
+print("expected=%d external_read=%d -> %s" % (expected, got, "PASS" if got == expected else "FAIL"))
+app._poll_interval_ms = 10 ** 9
+root.destroy()
+sys.exit(0 if got == expected else 1)

@@ -1,0 +1,85 @@
+# -*- coding: utf-8 -*-
+"""抓「编辑预期结果」对话框测试区的两种结果（命中=绿 / 未命中=红），用替身串口驱动。
+
+用法：python tools/shot_test_area.py
+输出：ui_shot_testarea_pass.bmp / ui_shot_testarea_fail.bmp
+"""
+import os
+import sys
+import tkinter as tk
+import tkinter.messagebox as mb
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+
+from ecom.app import EcomApp            # noqa: E402
+from ecom.config import Config          # noqa: E402
+from ecom.serial_core import SerialCore  # noqa: E402
+from win_grab import grab_window        # noqa: E402
+
+mb.showinfo = lambda *a, **k: None
+RESP = b"AT+CSUB\r\n+QCSUB: V04\r\nOK\r\n"
+
+
+class FakeCore:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+        self.written = []
+
+    @property
+    def is_open(self):
+        return True
+
+    def write(self, data):
+        self.written.append(bytes(data))
+        return len(data)
+
+    def drain(self):
+        return [(SerialCore.RX_DATA, self.chunks.pop(0))] if self.chunks else []
+
+    def list_ports(self):
+        return []
+
+
+root = tk.Tk()
+app = EcomApp(root)
+app.config = Config(os.path.join(HERE, "_shot_tmp_config.json"))
+root.geometry("1180x800+20+20")
+root.deiconify()
+root.update()
+panel = app._get_stress_view()
+root.update()
+panel._rows[0].txt = "AT+CSUB"
+for v in panel._row_vars:
+    if v.get("gidx") == 0:
+        v["txt"].set("AT+CSUB")
+panel._active_port = "COM105"
+for expect, tag in (("OK", "pass"), ("THIS_WONT_MATCH", "fail")):
+    panel._rows[0].expected = expect
+    panel._edit_expected(0)
+    root.update()
+    dlg = [w for w in panel.winfo_children() if isinstance(w, tk.Toplevel)][0]
+    dlg.deiconify()
+    dlg.lift()
+    dlg.geometry("640x670+520+40")
+    dlg.update()
+    panel.core = FakeCore([RESP])
+    dlg._test_btn.invoke()
+    end = 0
+    while end < 400:                     # 最多等 ~8s
+        root.update()
+        if dlg._test_res.tag_ranges("ok") or dlg._test_res.tag_ranges("fail"):
+            break
+        root.update_idletasks()
+        import time
+        time.sleep(0.02)
+        end += 1
+    out = os.path.join(HERE, "ui_shot_testarea_%s.bmp" % tag)
+    print("grab %s:" % out, grab_window(int(dlg.wm_frame(), 16), out))
+    print("  提示行:", repr(dlg._test_target.cget("text")))
+    print("  结论文本:", repr(dlg._test_res.get("1.0", "end-1c").splitlines()[-1]))
+    dlg.destroy()
+    root.update()
+panel._poll_interval_ms = 10 ** 9
+root.destroy()
