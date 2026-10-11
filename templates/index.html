@@ -1,0 +1,2833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大乐透分析助手</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #e74c3c;
+            --primary-dark: #c0392b;
+            --primary-light: #ff6b5a;
+            --secondary: #3498db;
+            --secondary-dark: #2980b9;
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-light: #7f8c8d;
+            --border: #e8e8e8;
+            --success: #27ae60;
+            --shadow: 0 2px 12px rgba(0,0,0,0.06);
+            --radius: 14px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 60%, #9b2d20 100%);
+            color: white;
+            padding: 22px 20px 28px;
+            text-align: center;
+            position: relative;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(231,76,60,0.25);
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header .subtitle {
+            font-size: 0.78rem;
+            opacity: 0.8;
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0; right: 0;
+            height: 18px;
+            background: var(--bg);
+            border-radius: 18px 18px 0 0;
+        }
+
+        /* ── Nav Tabs ── */
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 0 12px;
+            margin-top: -12px;
+            margin-bottom: 4px;
+            position: relative;
+            z-index: 101;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+
+        .nav-tab {
+            flex: 1;
+            min-width: 64px;
+            padding: 10px 4px;
+            text-align: center;
+            font-size: 0.82rem;
+            color: var(--text-light);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            user-select: none;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            font-weight: 500;
+        }
+        .nav-tab.active {
+            color: white;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            font-weight: 700;
+            box-shadow: 0 4px 14px rgba(231,76,60,0.35);
+            transform: translateY(-2px);
+        }
+        .nav-tab:active { transform: scale(0.96); }
+
+        /* ── Content ── */
+        .content { max-width: 960px; margin: 0 auto; padding: 8px 14px 24px; }
+        .section { display: none; }
+        .section.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ── Card ── */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ── Latest Draw ── */
+        .latest-draw { text-align: center; }
+        .latest-period {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+        .latest-period .period-num {
+            font-weight: 800;
+            color: var(--text);
+            font-size: 1.15rem;
+        }
+        .latest-date {
+            font-size: 0.9rem;
+            color: var(--text);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+        .latest-date .date-badge {
+            background: #f0f2f5;
+            padding: 2px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .latest-date .weekday-badge {
+            background: #fff3e0;
+            color: #e67e22;
+            padding: 2px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .balls-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+        .ball {
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.05rem; font-weight: 800; color: white;
+            flex-shrink: 0;
+        }
+        .ball.front {
+            background: radial-gradient(circle at 30% 30%, var(--primary-light), var(--primary-dark));
+            box-shadow: 0 3px 8px rgba(231,76,60,0.35);
+        }
+        .ball.back {
+            background: radial-gradient(circle at 30% 30%, #5dade2, var(--secondary-dark));
+            box-shadow: 0 3px 8px rgba(52,152,219,0.35);
+        }
+        .ball-separator { width: 1px; height: 26px; background: var(--border); margin: 0 4px; }
+
+        /* ── Quick Actions ── */
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .quick-actions .btn { flex: 1; min-width: 120px; }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; box-shadow: 0 2px 8px rgba(231,76,60,0.25); }
+        .btn-primary:hover { box-shadow: 0 4px 14px rgba(231,76,60,0.35); transform: translateY(-1px); }
+        .btn-primary:active { transform: scale(0.97); }
+        .btn-outline { background: white; color: var(--text); border: 1.5px solid var(--border); }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+        .btn-spinner {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Fetch Overlay ── */
+        .fetch-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        }
+        .fetch-overlay.show { display: flex; }
+        .fetch-overlay-content {
+            background: white;
+            border-radius: 16px;
+            padding: 32px 40px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .fetch-overlay-spinner {
+            width: 48px; height: 48px;
+            border: 4px solid #f0f0f0;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin: 0 auto 16px;
+        }
+        .fetch-overlay-text { font-size: 0.95rem; color: var(--text); font-weight: 600; }
+        .fetch-overlay-sub { font-size: 0.8rem; color: var(--text-light); margin-top: 4px; }
+
+        /* ── Stats ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .stat-item { background: #f8f9fa; border-radius: 10px; padding: 10px 12px; text-align: center; }
+        .stat-label { font-size: 0.72rem; color: var(--text-light); }
+        .stat-value { font-size: 1.25rem; font-weight: 800; color: var(--text); margin-top: 2px; }
+
+        .freq-container { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 640px) { .freq-container { grid-template-columns: 1fr; } }
+        .chart-wrap { position: relative; height: 240px; }
+
+        .hot-cold-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 640px) { .hot-cold-grid { grid-template-columns: 1fr; } }
+        .hot-cold-box { background: #f8f9fa; border-radius: 10px; padding: 12px; }
+        .hot-cold-title { font-size: 0.82rem; font-weight: 600; margin-bottom: 8px; }
+        .mini-ball {
+            display: inline-flex; width: 28px; height: 28px;
+            border-radius: 50%; align-items: center; justify-content: center;
+            font-size: 0.72rem; font-weight: 700; color: white; margin: 2px;
+        }
+        .mini-ball.front { background: var(--primary); }
+        .mini-ball.back { background: var(--secondary); }
+        .mini-ball.cold-front { background: #bdc3c7; color: #555; }
+
+        /* ── Recommend ── */
+        .recommend-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+        }
+        .recommend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .recommend-idx { background: rgba(255,255,255,0.25); border-radius: 20px; padding: 2px 12px; font-size: 0.8rem; font-weight: 600; }
+        .recommend-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+        .recommend-tag { font-size: 0.7rem; background: rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; }
+        .recommend-balls { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
+        .recommend-balls .ball { width: 30px; height: 30px; font-size: 0.78rem; }
+        .recommend-balls .ball-separator { margin: 0 2px; }
+        .recommend-logic { font-size: 0.76rem; color: var(--text-light); line-height: 1.6; margin-top: 10px; padding: 8px 10px; background: #f8f9fa; border-radius: 8px; }
+
+        /* ── Sub Tabs (推荐内) ── */
+        .sub-tabs { display: flex; gap: 0; margin-bottom: 12px; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--border); }
+        .sub-tab { flex: 1; text-align: center; padding: 10px 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; background: #fff; color: var(--text-light); }
+        .sub-tab.active { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; }
+        .sub-tab-content { display: none; }
+        .sub-tab-content.active { display: block; }
+
+        /* ── All Combos Table ── */
+        .combo-summary { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .combo-summary-item { flex: 1; min-width: 100px; text-align: center; padding: 8px; border-radius: 8px; background: #f8f9fa; }
+        .combo-summary-label { font-size: 0.72rem; color: var(--text-light); }
+        .combo-summary-value { font-size: 1rem; font-weight: 700; margin-top: 2px; }
+        .combo-filter-bar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+        .combo-filter-btn { padding: 4px 12px; font-size: 0.78rem; border-radius: 20px; border: 1px solid var(--border); background: #fff; cursor: pointer; transition: all 0.2s; }
+        .combo-filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .combo-appeared-row { background: #e8f5e9 !important; }
+        .combo-unappeared-row { background: #fff !important; }
+
+        /* ── Random Sim ── */
+        .random-param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .random-param-item { display: flex; flex-direction: column; gap: 2px; }
+        .random-param-label { font-size: 0.72rem; color: var(--text-light); }
+        .random-param-input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82rem; }
+        .random-logic-text { font-size: 0.74rem; color: var(--text-light); line-height: 1.5; padding: 8px 10px; background: #f8f9fa; border-radius: 8px; margin-top: 8px; }
+        .progress-bar-wrap { background: #e8eaf0; border-radius: 20px; height: 24px; overflow: hidden; position: relative; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 20px; transition: width 0.1s; }
+        .progress-bar-text { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .random-result-section { margin-top: 12px; }
+        .random-result-title { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+        .random-result-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+        .random-result-table th { background: #f8f9fa; padding: 6px; text-align: left; font-weight: 600; color: var(--text-light); border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .random-result-table td { padding: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .pagination { display: flex; gap: 4px; align-items: center; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+        .pagination button { padding: 4px 10px; font-size: 0.78rem; border: 1px solid var(--border); background: #fff; border-radius: 6px; cursor: pointer; }
+        .pagination button.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination .page-info { font-size: 0.76rem; color: var(--text-light); padding: 0 6px; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { background: #f8f9fa; padding: 10px 8px; text-align: left; font-weight: 600; color: var(--text-light); white-space: nowrap; border-bottom: 2px solid var(--border); position: sticky; top: 0; }
+        td { padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        tr:hover { background: #f8f9fa; }
+        .td-balls { display: flex; gap: 3px; align-items: center; }
+        .td-ball { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.68rem; font-weight: 700; color: white; }
+        .td-ball.front { background: var(--primary); }
+        .td-ball.back { background: var(--secondary); }
+        .weekday-cell { font-size: 0.78rem; color: var(--text-light); }
+        .date-cell { font-size: 0.82rem; }
+
+        /* ── Search Bar ── */
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .search-type-select {
+            padding: 8px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            outline: none;
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .search-type-select:focus { border-color: var(--primary); }
+        .search-input-wrap {
+            flex: 1;
+            min-width: 160px;
+            position: relative;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px 32px 8px 34px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus { border-color: var(--primary); }
+        .search-input.readonly-style { background: #f8f9fa; cursor: pointer; }
+        .search-input-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.9rem;
+            color: var(--text-light);
+            pointer-events: none;
+        }
+        .search-clear-icon {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ccc;
+            color: white;
+            border: none;
+            font-size: 0.7rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            padding: 0;
+            transition: background 0.2s;
+        }
+        .search-clear-icon:hover { background: #999; }
+        .search-clear-icon.show { display: flex; }
+        .search-result-info {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        .search-btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px rgba(231,76,60,0.2);
+        }
+        .search-btn:hover { box-shadow: 0 3px 10px rgba(231,76,60,0.3); }
+        .search-btn:active { transform: scale(0.96); }
+        .no-result {
+            text-align: center;
+            padding: 30px 0;
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        /* ── Number Picker Modal ── */
+        .picker-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9998;
+            backdrop-filter: blur(2px);
+        }
+        .picker-overlay.show { display: flex; }
+        .picker-modal {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            width: 92%;
+            max-width: 420px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            animation: pickerIn 0.25s ease;
+        }
+        @keyframes pickerIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .picker-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .picker-section { margin-bottom: 16px; }
+        .picker-section-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .picker-section-label .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .picker-section-label .dot.front { background: var(--primary); }
+        .picker-section-label .dot.back { background: var(--secondary); }
+        .picker-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+        }
+        @media (max-width: 380px) {
+            .picker-grid { grid-template-columns: repeat(6, 1fr); }
+        }
+        .picker-ball {
+            aspect-ratio: 1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
+            border: 2px solid transparent;
+        }
+        .picker-ball.front {
+            background: #f0f2f5;
+            color: var(--text-light);
+        }
+        .picker-ball.front.selected {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary-dark);
+            transform: scale(1.08);
+            box-shadow: 0 2px 8px rgba(231,76,60,0.35);
+        }
+        .picker-ball.back {
+            background: #f0f2f5;
+            color: var(--text-light);
+        }
+        .picker-ball.back.selected {
+            background: var(--secondary);
+            color: white;
+            border-color: var(--secondary-dark);
+            transform: scale(1.08);
+            box-shadow: 0 2px 8px rgba(52,152,219,0.35);
+        }
+        .picker-ball:active { transform: scale(0.92); }
+        .picker-selected-info {
+            font-size: 0.78rem;
+            color: var(--text-light);
+            text-align: center;
+            margin-bottom: 12px;
+            min-height: 1.2em;
+        }
+        .picker-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .picker-actions .btn { flex: 1; }
+
+        /* ── Review Section ── */
+        .review-section {
+            margin-bottom: 14px;
+        }
+        .review-section-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .review-display-box {
+            border: 1.5px dashed var(--border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .review-display-box:hover {
+            border-color: var(--primary);
+            background: #fff5f4;
+        }
+        .review-display-box.filled {
+            border-style: solid;
+            border-color: var(--primary);
+        }
+        .review-actual-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .prize-bet-set {
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        .prize-bet-set-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .prize-bet-set-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .prize-bet-set-tag {
+            font-size: 0.72rem;
+            color: var(--text-light);
+            font-weight: 400;
+        }
+        .prize-bet-set-remove {
+            background: #ffe0e0;
+            color: #e74c3c;
+            border: none;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .prize-bet-set-remove:hover {
+            background: #e74c3c;
+            color: white;
+        }
+        .prize-bet-set .review-display-box {
+            margin: 0;
+        }
+
+        /* ── Period Picker List ── */
+        .period-list {
+            max-height: 380px;
+            overflow-y: auto;
+            margin-bottom: 4px;
+        }
+        .period-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .period-item:hover { background: #f5f6f8; }
+        .period-item.selected { background: #fff3e0; }
+        .period-radio {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            flex-shrink: 0;
+            position: relative;
+            transition: border-color 0.2s;
+        }
+        .period-item.selected .period-radio {
+            border-color: var(--primary);
+        }
+        .period-item.selected .period-radio::after {
+            content: '';
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--primary);
+        }
+        .period-item-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .period-item-period {
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--text);
+        }
+        .period-item-date {
+            font-size: 0.76rem;
+            color: var(--text-light);
+        }
+        .period-item-balls {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .period-item-balls .mini-ball {
+            width: 22px; height: 22px;
+            font-size: 0.65rem;
+        }
+
+        /* ── Copy support ── */
+        .copyable {
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .copyable:active { transform: scale(1.15); }
+        .copy-feedback {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(44,62,80,0.92);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            z-index: 10000;
+            opacity: 0;
+            transition: all 0.25s;
+            pointer-events: none;
+        }
+        .copy-feedback.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* ── Stats Range Selector ── */
+        .stats-range-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .stats-range-select {
+            padding: 6px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.82rem;
+            outline: none;
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .stats-range-select:focus { border-color: var(--primary); }
+        .stats-date-input {
+            padding: 6px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.82rem;
+            outline: none;
+            color: var(--text);
+        }
+        .stats-date-input:focus { border-color: var(--primary); }
+        .stats-date-sep { font-size: 0.8rem; color: var(--text-light); }
+        .stats-date-row { display: none; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .stats-date-row.show { display: flex; }
+
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }
+        .page-btn { padding: 6px 16px; border: 1px solid var(--border); border-radius: 8px; background: white; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .page-info { font-size: 0.82rem; color: var(--text-light); }
+
+        /* ── Review ── */
+        .review-form { display: flex; flex-direction: column; gap: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-light); }
+        .form-group input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
+        .form-group input:focus { border-color: var(--primary); }
+        .ball-input-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ball-input { width: 44px; height: 44px; text-align: center; border: 2px solid var(--border); border-radius: 50%; font-size: 1rem; font-weight: 700; outline: none; -moz-appearance: textfield; }
+        .ball-input::-webkit-outer-spin-button, .ball-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .ball-input.front { border-color: var(--primary); }
+        .ball-input.back { border-color: var(--secondary); }
+        .ball-input:focus { box-shadow: 0 0 0 3px rgba(231,76,60,0.12); }
+        .ball-input.back:focus { box-shadow: 0 0 0 3px rgba(52,152,219,0.12); }
+
+        .btn-secondary { background: var(--secondary); color: white; }
+        .btn-secondary:hover { background: var(--secondary-dark); }
+
+        .review-result-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; gap: 8px; }
+        .review-result-item .balls-mini { display: flex; gap: 4px; align-items: center; }
+        .prize-tag { padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+        .prize-win { background: #e8f5e9; color: var(--success); }
+        .prize-lose { background: #f5f5f5; color: var(--text-light); }
+
+        /* ── Loading ── */
+        .loading { text-align: center; padding: 40px 20px; color: var(--text-light); }
+        .spinner { border: 3px solid var(--border); border-top: 3px solid var(--primary); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+
+        /* ── Toast ── */
+        .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(44,62,80,0.95); color: white; padding: 10px 24px; border-radius: 24px; font-size: 0.85rem; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        .toast.show { opacity: 1; }
+
+        /* ── Responsive ── */
+        @media (max-width: 480px) {
+            .header h1 { font-size: 1.2rem; }
+            .nav-tab { font-size: 0.76rem; min-width: 56px; padding: 9px 2px; }
+            .ball { width: 36px; height: 36px; font-size: 0.9rem; }
+            .recommend-balls .ball { width: 28px; height: 28px; font-size: 0.72rem; }
+            .recommend-balls { gap: 4px; }
+            .recommend-tags { gap: 4px; }
+            .recommend-tag { font-size: 0.65rem; padding: 2px 4px; }
+            .random-param-grid { grid-template-columns: 1fr; }
+            .stat-value { font-size: 1.1rem; }
+            .content { padding: 8px 10px 20px; }
+            .card { padding: 14px 12px; }
+            .quick-actions { flex-direction: column; }
+            .quick-actions .btn { min-width: unset; }
+            th, td { padding: 8px 6px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+    <h1>大乐透分析助手</h1>
+    <div class="subtitle">数据抓取 / 统计分析 / 智能推荐 / 开奖复盘</div>
+</div>
+
+<!-- ── Nav Tabs ── -->
+<div class="nav-tabs" id="navTabs">
+    <div class="nav-tab active" data-tab="latest">最新</div>
+    <div class="nav-tab" data-tab="history">历史</div>
+    <div class="nav-tab" data-tab="stats">统计</div>
+    <div class="nav-tab" data-tab="recommend">推荐</div>
+    <div class="nav-tab" data-tab="review">复盘</div>
+</div>
+
+<!-- ── Content ── -->
+<div class="content">
+
+    <!-- ═══ 最新 ═══ -->
+    <div class="section active" id="sec-latest">
+        <div class="card">
+            <div class="card-title">最新开奖</div>
+            <div id="latestContent">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">快捷操作</div>
+            <div class="quick-actions">
+                <button class="btn btn-primary" id="fetchBtn" onclick="doFetch()">
+                    抓取最新数据
+                </button>
+                <a class="btn btn-outline" href="/api/export/csv">导出CSV</a>
+                <a class="btn btn-outline" href="/api/export/txt">导出TXT</a>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">
+                开奖兑奖
+                <button class="btn btn-outline" style="margin-left:auto;padding:4px 12px;font-size:0.8rem" onclick="resetPrizeCheck()">重置</button>
+            </div>
+            <div class="review-section">
+                <div class="review-section-label">期号</div>
+                <div class="review-display-box" id="prizePeriodDisplay" onclick="openPrizePeriodPicker()">
+                    <span style="color:var(--text-light)">点击选择期号</span>
+                </div>
+            </div>
+            <div class="review-section" id="prizeActualSection" style="display:none">
+                <div class="review-section-label">该期开奖号码</div>
+                <div class="review-actual-box" id="prizeActualDisplay"></div>
+            </div>
+            <div class="review-section">
+                <div class="review-section-label">您的号码</div>
+                <div id="prizeBetSetsContainer"></div>
+            </div>
+            <div style="text-align:center;margin:10px 0">
+                <button class="btn btn-outline" id="prizeAddSetBtn" style="padding:6px 24px;font-size:0.85rem" onclick="addPrizeBetSet()">+ 添加一组号码</button>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:6px" id="prizeSubmitBtn" onclick="doPrizeCheck()" disabled>开始兑奖</button>
+        </div>
+        <div class="card" id="prizeResultCard" style="display:none">
+            <div class="card-title">兑奖结果</div>
+            <div id="prizeResultContent"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">大乐透玩法规则</div>
+            <div id="prizeRulesContent">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">奖级一览</div>
+            <div id="prizeLevelsContent">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 兑奖期号选择弹窗 ═══ -->
+    <div class="picker-overlay" id="prizePeriodOverlay" onclick="closePrizePeriodOnOverlay(event)">
+        <div class="picker-modal" onclick="event.stopPropagation()">
+            <div class="picker-title">选择期号</div>
+            <div style="margin-bottom:10px">
+                <div class="search-input-wrap" style="width:100%">
+                    <span class="search-input-icon">🔍</span>
+                    <input type="text" class="search-input" id="prizePeriodSearchInput" placeholder="搜索期号..." oninput="filterPrizePeriodList()" />
+                    <button class="search-clear-icon" id="prizePeriodSearchClear" onclick="clearPrizePeriodSearch()">&times;</button>
+                </div>
+            </div>
+            <div class="period-list" id="prizePeriodList">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+            <div class="picker-actions">
+                <button class="btn btn-outline" onclick="closePrizePeriodPicker()">取消</button>
+                <button class="btn btn-primary" onclick="submitPrizePeriodPicker()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 兑奖号码选择弹窗 ═══ -->
+    <div class="picker-overlay" id="prizePickerOverlay" onclick="closePrizePickerOnOverlay(event)">
+        <div class="picker-modal" onclick="event.stopPropagation()">
+            <div class="picker-title">选择您的号码（支持复式）</div>
+            <div class="picker-section">
+                <div class="picker-section-label"><span class="dot front"></span> 前区（至少选5个，1-35）</div>
+                <div class="picker-grid" id="prizeFrontGrid"></div>
+            </div>
+            <div class="picker-section">
+                <div class="picker-section-label"><span class="dot back"></span> 后区（至少选2个，1-12）</div>
+                <div class="picker-grid" id="prizeBackGrid"></div>
+            </div>
+            <div class="picker-selected-info" id="prizePickerInfo">未选择任何号码（前区至少5个，后区至少2个）</div>
+            <div class="picker-actions">
+                <button class="btn btn-outline" onclick="clearPrizePicker()">全部清除</button>
+                <button class="btn btn-primary" onclick="submitPrizePicker()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 历史 ═══ -->
+    <div class="section" id="sec-history">
+        <div class="card">
+            <div class="card-title">历史开奖（新 → 旧）</div>
+            <div class="search-bar">
+                <select class="search-type-select" id="searchType">
+                    <option value="all">全部</option>
+                    <option value="period">按期号</option>
+                    <option value="date">按日期</option>
+                    <option value="weekday">按星期</option>
+                    <option value="numbers">按号码</option>
+                </select>
+                <div class="search-input-wrap">
+                    <span class="search-input-icon">🔍</span>
+                    <input type="text" class="search-input" id="searchInput" placeholder="输入关键词，支持模糊搜索..." />
+                    <button class="search-clear-icon" id="searchClearIcon" onclick="clearSearchInput()">&times;</button>
+                </div>
+                <button class="search-btn" onclick="triggerSearch()">搜索</button>
+            </div>
+            <div class="search-result-info" id="searchResultInfo"></div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>期号</th>
+                            <th>日期</th>
+                            <th>星期</th>
+                            <th>前区</th>
+                            <th>后区</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr><td colspan="5"><div class="loading"><div class="spinner"></div>加载中...</div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- ═══ 号码选择弹窗 ═══ -->
+    <div class="picker-overlay" id="pickerOverlay" onclick="closePickerOnOverlay(event)">
+        <div class="picker-modal" onclick="event.stopPropagation()">
+            <div class="picker-title">选择号码搜索</div>
+            <div class="picker-section">
+                <div class="picker-section-label"><span class="dot front"></span> 前区（1-35）</div>
+                <div class="picker-grid" id="frontPickerGrid"></div>
+            </div>
+            <div class="picker-section">
+                <div class="picker-section-label"><span class="dot back"></span> 后区（1-12）</div>
+                <div class="picker-grid" id="backPickerGrid"></div>
+            </div>
+            <div class="picker-selected-info" id="pickerSelectedInfo">未选择任何号码</div>
+            <div class="picker-actions">
+                <button class="btn btn-outline" onclick="clearPickerSelection()">全部清除</button>
+                <button class="btn btn-primary" onclick="searchByNumbers()">搜索</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 复制反馈 ═══ -->
+    <div class="copy-feedback" id="copyFeedback">已复制</div>
+
+    <!-- ═══ 统计 ═══ -->
+    <div class="section" id="sec-stats">
+        <div class="card">
+            <div class="card-title">
+                频率分析
+                <button class="btn btn-outline" style="margin-left:auto;padding:4px 12px;font-size:0.8rem" onclick="loadStatsRange()">分析</button>
+            </div>
+            <div class="stats-range-bar">
+                <select class="stats-range-select" id="statsRange" onchange="onStatsRangeChange()">
+                    <option value="recent30">最近30期</option>
+                    <option value="recent50">最近50期</option>
+                    <option value="all">全部数据</option>
+                    <option value="custom">自定义时间</option>
+                </select>
+                <div class="stats-date-row" id="statsDateRow">
+                    <input type="date" class="stats-date-input" id="statsStartDate" />
+                    <span class="stats-date-sep">至</span>
+                    <input type="date" class="stats-date-input" id="statsEndDate" />
+                </div>
+            </div>
+            <div id="statsContent">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ 推荐 ═══ -->
+<div class="section" id="sec-recommend">
+    <div class="sub-tabs">
+        <div class="sub-tab active" data-subtab="smart" onclick="switchRecSubtab('smart')">智能推荐</div>
+        <div class="sub-tab" data-subtab="random" onclick="switchRecSubtab('random')">随机选择</div>
+    </div>
+
+    <!-- ── 智能推荐 ── -->
+    <div id="rec-subtab-smart" class="sub-tab-content active">
+        <div class="card">
+            <div class="card-title">
+                智能推荐
+                <button class="btn btn-outline" style="margin-left:auto;padding:4px 12px;font-size:0.8rem" onclick="generateRecommend()">重新生成</button>
+            </div>
+            <div id="recommendContent">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+            <div id="recommendLogic" class="recommend-logic" style="display:none"></div>
+        </div>
+    </div>
+
+    <!-- ── 随机选择 ── -->
+    <div id="rec-subtab-random" class="sub-tab-content">
+        <div class="card">
+            <div class="card-title">随机选择参数</div>
+            <div class="random-param-grid">
+                <div class="random-param-item">
+                    <label class="random-param-label">随机次数（最高1亿）</label>
+                    <input type="number" class="random-param-input" id="randomCount" value="10000" min="1" max="100000000" />
+                </div>
+                <div class="random-param-item">
+                    <label class="random-param-label">显示条数（最低/最高）</label>
+                    <input type="number" class="random-param-input" id="randomDisplayCount" value="10" min="1" max="100" />
+                </div>
+                <div class="random-param-item">
+                    <label class="random-param-label">前区范围</label>
+                    <div style="display:flex;gap:4px;align-items:center">
+                        <input type="number" class="random-param-input" id="randomFrontMin" value="1" min="1" max="35" style="width:50px" />
+                        <span style="font-size:0.78rem;color:var(--text-light)">~</span>
+                        <input type="number" class="random-param-input" id="randomFrontMax" value="35" min="1" max="35" style="width:50px" />
+                    </div>
+                </div>
+                <div class="random-param-item">
+                    <label class="random-param-label">后区范围</label>
+                    <div style="display:flex;gap:4px;align-items:center">
+                        <input type="number" class="random-param-input" id="randomBackMin" value="1" min="1" max="12" style="width:50px" />
+                        <span style="font-size:0.78rem;color:var(--text-light)">~</span>
+                        <input type="number" class="random-param-input" id="randomBackMax" value="12" min="1" max="12" style="width:50px" />
+                    </div>
+                </div>
+                <div class="random-param-item">
+                    <label class="random-param-label">未开奖随机注数</label>
+                    <input type="number" class="random-param-input" id="randomUnopenedCount" value="5" min="1" max="50" />
+                </div>
+            </div>
+            <div class="random-logic-text">
+                随机逻辑：每次从前区选定范围内随机抽取5个号码（Fisher-Yates洗牌），后区选定范围内随机抽取2个号码，组成一注。重复N次后统计每注出现次数，计算概率。整个过程完全随机，每次运行结果不同。
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn btn-primary" style="flex:1" id="randomStartBtn" onclick="startRandomSim()">开始随机</button>
+                <button class="btn btn-outline" style="flex:1" id="randomStopBtn" onclick="stopRandomSim()" disabled>停止</button>
+            </div>
+            <div id="randomProgressSection" style="display:none;margin-top:10px">
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" id="randomProgressBar" style="width:0%"></div>
+                    <div class="progress-bar-text" id="randomProgressText">0 / 0 (0%)</div>
+                </div>
+            </div>
+        </div>
+        <div id="randomResults"></div>
+    </div>
+
+    <!-- ── 所有组合 ── -->
+    <div class="card">
+        <div class="card-title">大乐透所有组合</div>
+        <div class="combo-summary" id="comboSummary">
+            <div class="combo-summary-item"><div class="combo-summary-label">总组合数</div><div class="combo-summary-value" id="comboTotal">-</div></div>
+            <div class="combo-summary-item"><div class="combo-summary-label">已开奖</div><div class="combo-summary-value" style="color:#27ae60" id="comboAppeared">-</div></div>
+            <div class="combo-summary-item"><div class="combo-summary-label">未开奖</div><div class="combo-summary-value" style="color:#e74c3c" id="comboUnappeared">-</div></div>
+        </div>
+        <div class="combo-filter-bar">
+            <button class="combo-filter-btn active" data-filter="all" onclick="setComboFilter('all')">全部</button>
+            <button class="combo-filter-btn" data-filter="appeared" onclick="setComboFilter('appeared')">仅已开奖</button>
+            <span style="margin-left:auto;font-size:0.76rem;color:var(--text-light)" id="comboPageInfo"></span>
+        </div>
+        <div class="table-wrap" id="comboTableWrap">
+            <div class="loading"><div class="spinner"></div>加载中...</div>
+        </div>
+        <div class="pagination" id="comboPagination"></div>
+    </div>
+</div>
+
+    <!-- ═══ 复盘 ═══ -->
+    <div class="section" id="sec-review">
+        <div class="card">
+            <div class="card-title">开奖复盘</div>
+            <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:12px">
+                选择期号，系统自动从历史数据获取开奖号码，与当前推荐进行对比
+            </p>
+            <div class="review-section">
+                <div class="review-section-label">期号</div>
+                <div class="review-display-box" id="reviewPeriodDisplay" onclick="openPeriodPicker()">
+                    <span style="color:var(--text-light)">点击选择期号</span>
+                </div>
+            </div>
+            <div class="review-section" id="reviewActualSection" style="display:none">
+                <div class="review-section-label">该期开奖号码</div>
+                <div class="review-actual-box" id="reviewActualDisplay"></div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:6px" id="reviewSubmitBtn" onclick="doReview()" disabled>提交复盘</button>
+        </div>
+        <div class="card" id="reviewResultCard" style="display:none">
+            <div class="card-title">复盘结果</div>
+            <div id="reviewResultContent"></div>
+        </div>
+    </div>
+
+    <!-- ═══ 期号选择弹窗 ═══ -->
+    <div class="picker-overlay" id="periodPickerOverlay" onclick="closePeriodPickerOnOverlay(event)">
+        <div class="picker-modal" onclick="event.stopPropagation()">
+            <div class="picker-title">选择期号</div>
+            <div style="margin-bottom:10px">
+                <div class="search-input-wrap" style="width:100%">
+                    <span class="search-input-icon">🔍</span>
+                    <input type="text" class="search-input" id="periodSearchInput" placeholder="搜索期号..." oninput="filterPeriodList()" />
+                    <button class="search-clear-icon" id="periodSearchClear" onclick="clearPeriodSearch()">&times;</button>
+                </div>
+            </div>
+            <div class="period-list" id="periodList">
+                <div class="loading"><div class="spinner"></div>加载中...</div>
+            </div>
+            <div class="picker-actions">
+                <button class="btn btn-outline" onclick="closePeriodPicker()">取消</button>
+                <button class="btn btn-primary" onclick="submitPeriodPicker()">确定</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Fetch Overlay ── -->
+<div class="fetch-overlay" id="fetchOverlay">
+    <div class="fetch-overlay-content">
+        <div class="fetch-overlay-spinner"></div>
+        <div class="fetch-overlay-text">正在拉取数据...</div>
+        <div class="fetch-overlay-sub">请耐心等待，数据量较大</div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── 全局状态 ──
+let currentPage = 0;
+const pageSize = 20;
+let frontChart = null;
+let backChart = null;
+
+// ── 工具函数 ──
+async function api(url, options) {
+    const res = await fetch(url, options);
+    return res.json();
+}
+
+function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function ballsHTML(front, back) {
+    let html = '<div class="td-balls">';
+    front.forEach(n => html += `<span class="td-ball front">${pad2(n)}</span>`);
+    html += '<span style="width:6px"></span>';
+    back.forEach(n => html += `<span class="td-ball back">${pad2(n)}</span>`);
+    html += '</div>';
+    return html;
+}
+
+function fullBallsHTML(front, back) {
+    let html = '<div class="balls-row">';
+    front.forEach(n => html += `<div class="ball front">${pad2(n)}</div>`);
+    html += '<div class="ball-separator"></div>';
+    back.forEach(n => html += `<div class="ball back">${pad2(n)}</div>`);
+    html += '</div>';
+    return html;
+}
+
+// ── Tab 切换 ──
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        document.getElementById('sec-' + target).classList.add('active');
+
+        if (target === 'stats' && !frontChart) loadStatsRange();
+        if (target === 'history') loadHistory(0);
+        if (target === 'recommend') {
+            loadRecommend();
+            if (!comboSummaryLoaded) { loadComboSummary(); loadCombos(1); }
+        }
+    });
+});
+
+// ── 加载最新 ──
+async function loadLatest() {
+    try {
+        const data = await api('/api/latest');
+        const el = document.getElementById('latestContent');
+        if (data.error) {
+            el.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px 0">暂无数据，请点击"抓取最新数据"</p>';
+            return;
+        }
+        el.innerHTML = `
+            <div class="latest-draw">
+                <div class="latest-period">第 <span class="period-num">${data.period}</span> 期</div>
+                <div class="latest-date">
+                    <span class="date-badge">${data.draw_date || ''}</span>
+                    <span class="weekday-badge">${data.weekday || ''}</span>
+                </div>
+                ${fullBallsHTML(data.front, data.back)}
+            </div>
+        `;
+    } catch (e) {
+        document.getElementById('latestContent').innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+    }
+}
+
+// ── 数据抓取 ──
+async function doFetch() {
+    const btn = document.getElementById('fetchBtn');
+    const overlay = document.getElementById('fetchOverlay');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> 抓取中...';
+    overlay.classList.add('show');
+
+    try {
+        const data = await api('/api/fetch', { method: 'POST' });
+        if (data.success) {
+            showToast(`抓取成功！共 ${data.total} 期，新增 ${data.new_count} 期`);
+            loadLatest();
+            allHistoryData = [];
+            if (document.getElementById('sec-history').classList.contains('active')) {
+                loadHistory(0);
+            }
+        } else {
+            showToast('抓取失败: ' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        showToast('网络错误，请重试');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '抓取最新数据';
+        overlay.classList.remove('show');
+    }
+}
+
+// ── 统计分析 ──
+function onStatsRangeChange() {
+    const range = document.getElementById('statsRange').value;
+    const dateRow = document.getElementById('statsDateRow');
+    if (range === 'custom') {
+        dateRow.classList.add('show');
+    } else {
+        dateRow.classList.remove('show');
+        loadStatsRange();
+    }
+}
+
+async function loadStatsRange() {
+    const range = document.getElementById('statsRange').value;
+    let url = '/api/stats?refresh=1';
+
+    if (range === 'recent30') {
+        url += '&window=30';
+    } else if (range === 'recent50') {
+        url += '&window=50';
+    } else if (range === 'all') {
+        url += '&window=999999';
+    } else if (range === 'custom') {
+        const start = document.getElementById('statsStartDate').value;
+        const end = document.getElementById('statsEndDate').value;
+        if (!start && !end) {
+            showToast('请至少选择一个日期');
+            return;
+        }
+        if (start) url += '&start_date=' + start;
+        if (end) url += '&end_date=' + end;
+    }
+
+    await loadStats(url);
+}
+
+async function loadStats(url) {
+    const el = document.getElementById('statsContent');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
+
+    try {
+        if (!url) url = '/api/stats?refresh=1&window=30';
+        const data = await api(url);
+        if (data.error) {
+            el.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px 0">暂无数据，请先抓取</p>';
+            return;
+        }
+
+        // 范围描述
+        let rangeDesc = '';
+        if (data.date_filtered) {
+            rangeDesc = (data.start_date || '起始') + ' 至 ' + (data.end_date || '至今');
+        } else if (data.window >= 999999) {
+            rangeDesc = '全部 ' + data.total_history + ' 期';
+        } else {
+            rangeDesc = '最近 ' + data.window + ' 期';
+        }
+
+        let html = `
+            <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:10px">
+                数据范围: <strong>${rangeDesc}</strong>
+                ${data.earliest_period ? '(' + data.earliest_period + ' ~ ' + data.latest_period + ')' : ''}
+            </div>
+            <div class="stat-grid">
+                <div class="stat-item"><div class="stat-label">分析期数</div><div class="stat-value">${data.window || 0}期</div></div>
+                <div class="stat-item"><div class="stat-label">总历史期数</div><div class="stat-value">${data.total_history || 0}</div></div>
+                <div class="stat-item"><div class="stat-label">前区和值均值</div><div class="stat-value">${data.front_sum_avg || 0}</div></div>
+                <div class="stat-item"><div class="stat-label">后区和值均值</div><div class="stat-value">${data.back_sum_avg || 0}</div></div>
+                <div class="stat-item"><div class="stat-label">前区跨度均值</div><div class="stat-value">${data.front_span_avg || 0}</div></div>
+                <div class="stat-item"><div class="stat-label">连号出现率</div><div class="stat-value">${Math.round((data.consecutive_ratio || 0) * 100)}%</div></div>
+            </div>
+            <div class="freq-container">
+                <div>
+                    <div class="hot-cold-title">前区频率分布</div>
+                    <div class="chart-wrap"><canvas id="frontChart"></canvas></div>
+                </div>
+                <div>
+                    <div class="hot-cold-title">后区频率分布</div>
+                    <div class="chart-wrap"><canvas id="backChart"></canvas></div>
+                </div>
+            </div>
+            <div class="hot-cold-grid" style="margin-top:14px">
+                <div class="hot-cold-box">
+                    <div class="hot-cold-title">前区热号</div>
+                    <div>${(data.front_hot||[]).map(h=>`<span class="mini-ball front">${pad2(h.number)}</span>`).join('')}</div>
+                </div>
+                <div class="hot-cold-box">
+                    <div class="hot-cold-title">前区冷号</div>
+                    <div>${(data.front_cold||[]).map(h=>`<span class="mini-ball cold-front">${pad2(h.number)}</span>`).join('')}</div>
+                </div>
+                <div class="hot-cold-box">
+                    <div class="hot-cold-title">后区热号</div>
+                    <div>${(data.back_hot||[]).map(h=>`<span class="mini-ball back">${pad2(h.number)}</span>`).join('')}</div>
+                </div>
+                <div class="hot-cold-box">
+                    <div class="hot-cold-title">后区冷号</div>
+                    <div>${(data.back_cold||[]).map(h=>`<span class="mini-ball back" style="background:#bdc3c7;color:#555">${pad2(h.number)}</span>`).join('')}</div>
+                </div>
+            </div>
+        `;
+        el.innerHTML = html;
+
+        drawFrontChart(data.front_freq || []);
+        drawBackChart(data.back_freq || []);
+
+    } catch (e) {
+        el.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+    }
+}
+
+function drawFrontChart(freqData) {
+    const ctx = document.getElementById('frontChart').getContext('2d');
+    if (frontChart) frontChart.destroy();
+    frontChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: freqData.map(d => pad2(d.number)),
+            datasets: [{
+                data: freqData.map(d => d.count),
+                backgroundColor: freqData.map(d => {
+                    const max = Math.max(...freqData.map(x=>x.count), 1);
+                    const ratio = d.count / max;
+                    if (ratio > 0.66) return '#e74c3c';
+                    if (ratio > 0.33) return '#f39c12';
+                    return '#bdc3c7';
+                }),
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } },
+                y: { ticks: { font: { size: 10 } }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+function drawBackChart(freqData) {
+    const ctx = document.getElementById('backChart').getContext('2d');
+    if (backChart) backChart.destroy();
+    backChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: freqData.map(d => pad2(d.number)),
+            datasets: [{
+                data: freqData.map(d => d.count),
+                backgroundColor: freqData.map(d => {
+                    const max = Math.max(...freqData.map(x=>x.count), 1);
+                    const ratio = d.count / max;
+                    if (ratio > 0.66) return '#3498db';
+                    if (ratio > 0.33) return '#5dade2';
+                    return '#bdc3c7';
+                }),
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { font: { size: 10 } } },
+                y: { ticks: { font: { size: 10 } }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+// ── 推荐 ──
+async function loadRecommend() {
+    const el = document.getElementById('recommendContent');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+    try {
+        const data = await api('/api/recommend');
+        renderRecommend(data);
+    } catch (e) {
+        el.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+    }
+}
+
+async function generateRecommend() {
+    const el = document.getElementById('recommendContent');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div>生成中...</div>';
+    try {
+        const data = await api('/api/recommend?regenerate=1&n=5');
+        if (data.error) {
+            el.innerHTML = `<p style="text-align:center;color:var(--text-light)">${data.error}</p>`;
+            return;
+        }
+        renderRecommend(data);
+        showToast('推荐已重新生成');
+    } catch (e) {
+        el.innerHTML = '<p style="text-align:center;color:#e74c3c">生成失败</p>';
+    }
+}
+
+function renderRecommend(data) {
+    const el = document.getElementById('recommendContent');
+    const recs = data.recommendations || [];
+    if (!recs.length) {
+        el.innerHTML = '<p style="text-align:center;color:var(--text-light)">暂无推荐，请点击"重新生成"</p>';
+        return;
+    }
+
+    // 显示推荐逻辑
+    const logicEl = document.getElementById('recommendLogic');
+    if (data.logic) {
+        logicEl.textContent = data.logic;
+        logicEl.style.display = 'block';
+    } else {
+        logicEl.style.display = 'none';
+    }
+
+    let html = `<div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">生成时间: ${data.generated_at || ''}</div>`;
+    recs.forEach(r => {
+        const matchInfo = r.history_match && r.history_match.length > 0
+            ? `<span class="recommend-tag" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d">历史出现: ${r.history_match.join(', ')}</span>`
+            : `<span class="recommend-tag" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">历史未出现</span>`;
+        html += `
+            <div class="recommend-card">
+                <div class="recommend-header">
+                    <span class="recommend-idx">第 ${r.idx} 组</span>
+                    <div class="recommend-tags">
+                        <span class="recommend-tag">奇${r.odd_count}/偶${r.even_count}</span>
+                        <span class="recommend-tag">大${r.big_count}/小${r.small_count}</span>
+                        <span class="recommend-tag">和值${r.sum}</span>
+                        <span class="recommend-tag">跨度${r.span}</span>
+                    </div>
+                </div>
+                <div class="recommend-balls">
+                    ${r.front.map(n=>`<div class="ball front">${pad2(n)}</div>`).join('')}
+                    <div class="ball-separator"></div>
+                    ${r.back.map(n=>`<div class="ball back">${pad2(n)}</div>`).join('')}
+                </div>
+                <div style="margin-top:8px">${matchInfo}</div>
+            </div>
+        `;
+    });
+    el.innerHTML = html;
+}
+
+// ── 推荐子标签切换 ──
+function switchRecSubtab(tab) {
+    document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sub-tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.sub-tab[data-subtab="${tab}"]`).classList.add('active');
+    document.getElementById('rec-subtab-' + tab).classList.add('active');
+    if (tab === 'random' && !appearedSetLoaded) {
+        loadAppearedSet();
+    }
+    if (tab === 'smart' && !comboSummaryLoaded) {
+        loadComboSummary();
+        loadCombos(1);
+    }
+}
+
+// ── 所有组合 ──
+let comboCurrentPage = 1;
+let comboCurrentFilter = 'all';
+let comboSummaryLoaded = false;
+let appearedSetLoaded = false;
+let appearedSet = new Set();
+
+async function loadComboSummary() {
+    comboSummaryLoaded = true;
+    try {
+        const countData = await api('/api/combo-count');
+        document.getElementById('comboTotal').textContent = countData.total.toLocaleString();
+        const appearedData = await api('/api/appeared-combos');
+        const appearedCount = appearedData.total || 0;
+        document.getElementById('comboAppeared').textContent = appearedCount.toLocaleString();
+        document.getElementById('comboUnappeared').textContent = (countData.total - appearedCount).toLocaleString();
+    } catch (e) {}
+}
+
+async function loadAppearedSet() {
+    appearedSetLoaded = true;
+    try {
+        const data = await api('/api/appeared-combos');
+        appearedSet = new Set((data.data || []).map(c => c.key));
+    } catch (e) {}
+}
+
+function setComboFilter(filter) {
+    comboCurrentFilter = filter;
+    comboCurrentPage = 1;
+    document.querySelectorAll('.combo-filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.combo-filter-btn[data-filter="${filter}"]`).classList.add('active');
+    loadCombos(1);
+}
+
+async function loadCombos(page) {
+    comboCurrentPage = page;
+    const wrap = document.getElementById('comboTableWrap');
+    wrap.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+    try {
+        const data = await api(`/api/all-combos?page=${page}&page_size=20&filter=${comboCurrentFilter}`);
+        renderComboTable(data);
+    } catch (e) {
+        wrap.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+    }
+}
+
+function renderComboTable(data) {
+    const wrap = document.getElementById('comboTableWrap');
+    const items = data.data || [];
+
+    if (!items.length) {
+        wrap.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px 0">暂无数据</p>';
+        document.getElementById('comboPagination').innerHTML = '';
+        document.getElementById('comboPageInfo').textContent = '';
+        return;
+    }
+
+    let html = '<table><thead><tr><th>序号</th><th>前区</th><th>后区</th><th>状态</th><th>期号</th><th>日期</th><th>星期</th></tr></thead><tbody>';
+    const startIdx = (data.page - 1) * data.page_size;
+    items.forEach((item, i) => {
+        const rowClass = item.appeared ? 'combo-appeared-row' : 'combo-unappeared-row';
+        const statusHtml = item.appeared
+            ? '<span style="color:#27ae60;font-weight:600">已开奖</span>'
+            : '<span style="color:#999">未开奖</span>';
+        const frontBalls = item.front.map(n => `<span class="td-ball front">${pad2(n)}</span>`).join('');
+        const backBalls = item.back.map(n => `<span class="td-ball back">${pad2(n)}</span>`).join('');
+        html += `<tr class="${rowClass}">
+            <td style="font-size:0.76rem;color:var(--text-light)">${startIdx + i + 1}</td>
+            <td><div class="td-balls">${frontBalls}</div></td>
+            <td><div class="td-balls">${backBalls}</div></td>
+            <td>${statusHtml}</td>
+            <td style="font-size:0.78rem">${item.period || '-'}</td>
+            <td class="date-cell">${item.date || '-'}</td>
+            <td class="weekday-cell">${item.weekday || '-'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+
+    document.getElementById('comboPageInfo').textContent = `第 ${data.page} / ${data.total_pages} 页，共 ${data.total.toLocaleString()} 条`;
+
+    // 分页按钮
+    const pagEl = document.getElementById('comboPagination');
+    const tp = data.total_pages;
+    const cp = data.page;
+    let pagHtml = '';
+    pagHtml += `<button onclick="loadCombos(1)" ${cp === 1 ? 'disabled' : ''}>首页</button>`;
+    pagHtml += `<button onclick="loadCombos(${cp - 1})" ${cp === 1 ? 'disabled' : ''}>上一页</button>`;
+
+    let startP = Math.max(1, cp - 2);
+    let endP = Math.min(tp, cp + 2);
+    for (let p = startP; p <= endP; p++) {
+        pagHtml += `<button class="${p === cp ? 'active' : ''}" onclick="loadCombos(${p})">${p}</button>`;
+    }
+
+    pagHtml += `<button onclick="loadCombos(${cp + 1})" ${cp === tp ? 'disabled' : ''}>下一页</button>`;
+    pagHtml += `<button onclick="loadCombos(${tp})" ${cp === tp ? 'disabled' : ''}>末页</button>`;
+    pagHtml += `<span class="page-info">跳转 <input type="number" style="width:50px;padding:2px 4px;font-size:0.78rem;border:1px solid var(--border);border-radius:4px" value="${cp}" min="1" max="${tp}" onchange="loadCombos(parseInt(this.value)||1)" /> 页</span>`;
+    pagEl.innerHTML = pagHtml;
+}
+
+// ── 随机选择模拟 ──
+let randomSimStopped = false;
+let randomSimRunning = false;
+
+function randomSample(arr, k) {
+    const result = arr.slice();
+    for (let i = 0; i < k; i++) {
+        const j = i + Math.floor(Math.random() * (result.length - i));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result.slice(0, k);
+}
+
+async function startRandomSim() {
+    if (randomSimRunning) return;
+
+    const count = parseInt(document.getElementById('randomCount').value) || 10000;
+    if (count > 100000000) { showToast('最高1亿次'); return; }
+    if (count < 1) { showToast('至少1次'); return; }
+
+    const frontMin = parseInt(document.getElementById('randomFrontMin').value) || 1;
+    const frontMax = parseInt(document.getElementById('randomFrontMax').value) || 35;
+    const backMin = parseInt(document.getElementById('randomBackMin').value) || 1;
+    const backMax = parseInt(document.getElementById('randomBackMax').value) || 12;
+    const displayCount = parseInt(document.getElementById('randomDisplayCount').value) || 10;
+    const unopenedCount = parseInt(document.getElementById('randomUnopenedCount').value) || 5;
+
+    if (frontMax - frontMin + 1 < 5) { showToast('前区范围至少5个号码'); return; }
+    if (backMax - backMin + 1 < 2) { showToast('后区范围至少2个号码'); return; }
+    if (frontMin < 1 || frontMax > 35) { showToast('前区范围1-35'); return; }
+    if (backMin < 1 || backMax > 12) { showToast('后区范围1-12'); return; }
+
+    // 确保已加载已开奖集合
+    if (!appearedSetLoaded) {
+        await loadAppearedSet();
+    }
+
+    randomSimStopped = false;
+    randomSimRunning = true;
+
+    const frontPool = [];
+    for (let i = frontMin; i <= frontMax; i++) frontPool.push(i);
+    const backPool = [];
+    for (let i = backMin; i <= backMax; i++) backPool.push(i);
+
+    const comboCounts = new Map();
+    let drawn = 0;
+    const batchSize = Math.min(50000, Math.max(1000, Math.floor(count / 100)));
+
+    document.getElementById('randomProgressSection').style.display = 'block';
+    document.getElementById('randomProgressBar').style.width = '0%';
+    document.getElementById('randomProgressText').textContent = '0 / ' + count.toLocaleString() + ' (0%)';
+    document.getElementById('randomStartBtn').disabled = true;
+    document.getElementById('randomStopBtn').disabled = false;
+    document.getElementById('randomResults').innerHTML = '';
+
+    function batch() {
+        if (randomSimStopped) {
+            finishSim();
+            return;
+        }
+
+        const end = Math.min(drawn + batchSize, count);
+        for (let i = drawn; i < end; i++) {
+            const front = randomSample(frontPool, 5).sort((a, b) => a - b);
+            const back = randomSample(backPool, 2).sort((a, b) => a - b);
+            const key = front.join(',') + ',' + back.join(',');
+            comboCounts.set(key, (comboCounts.get(key) || 0) + 1);
+        }
+        drawn = end;
+
+        const percent = (drawn / count * 100).toFixed(2);
+        document.getElementById('randomProgressBar').style.width = percent + '%';
+        document.getElementById('randomProgressText').textContent = drawn.toLocaleString() + ' / ' + count.toLocaleString() + ' (' + percent + '%)';
+
+        if (drawn < count) {
+            setTimeout(batch, 0);
+        } else {
+            finishSim();
+        }
+    }
+
+    function finishSim() {
+        randomSimRunning = false;
+        document.getElementById('randomStartBtn').disabled = false;
+        document.getElementById('randomStopBtn').disabled = true;
+
+        if (drawn === 0) {
+            document.getElementById('randomResults').innerHTML = '<p style="text-align:center;color:#e74c3c">未执行任何随机</p>';
+            return;
+        }
+
+        // 处理结果
+        const entries = [];
+        for (const [key, cnt] of comboCounts.entries()) {
+            const nums = key.split(',').map(Number);
+            entries.push({
+                front: nums.slice(0, 5),
+                back: nums.slice(5, 7),
+                count: cnt,
+                probability: (cnt / drawn * 100).toFixed(4) + '%',
+                appeared: appearedSet.has(key)
+            });
+        }
+
+        entries.sort((a, b) => a.count - b.count);
+        const lowest = entries.slice(0, Math.min(displayCount, entries.length));
+
+        entries.sort((a, b) => b.count - a.count);
+        const highest = entries.slice(0, Math.min(displayCount, entries.length));
+
+        // 从未开奖中随机选取
+        const unopenedResults = [];
+        const seen = new Set();
+        let attempts = 0;
+        while (unopenedResults.length < unopenedCount && attempts < unopenedCount * 500) {
+            const front = randomSample(frontPool, 5).sort((a, b) => a - b);
+            const back = randomSample(backPool, 2).sort((a, b) => a - b);
+            const key = front.join(',') + ',' + back.join(',');
+            if (!appearedSet.has(key) && !seen.has(key)) {
+                seen.add(key);
+                unopenedResults.push({ front, back });
+            }
+            attempts++;
+        }
+
+        displayRandomResults(lowest, highest, unopenedResults, drawn, displayCount, unopenedCount);
+    }
+
+    batch();
+}
+
+function stopRandomSim() {
+    randomSimStopped = true;
+}
+
+function displayRandomResults(lowest, highest, unopened, totalDrawn, displayCount, unopenedCount) {
+    const el = document.getElementById('randomResults');
+    let html = `<div style="margin-bottom:12px;font-size:0.85rem;color:var(--text-light)">总随机次数: <strong style="color:var(--text)">${totalDrawn.toLocaleString()}</strong> 次，唯一组合数: <strong style="color:var(--text)">${(lowest.length > 0 ? lowest.length + highest.length : 0)}</strong></div>`;
+
+    // 最低概率
+    html += `<div class="random-result-section">
+        <div class="random-result-title">出现概率最低的 ${lowest.length} 注</div>
+        <div class="table-wrap"><table class="random-result-table"><thead><tr><th>排名</th><th>前区</th><th>后区</th><th>出现次数</th><th>概率</th><th>历史</th></tr></thead><tbody>`;
+    lowest.forEach((r, i) => {
+        const frontBalls = r.front.map(n => `<span class="td-ball front" style="width:20px;height:20px;font-size:0.62rem">${pad2(n)}</span>`).join('');
+        const backBalls = r.back.map(n => `<span class="td-ball back" style="width:20px;height:20px;font-size:0.62rem">${pad2(n)}</span>`).join('');
+        html += `<tr>
+            <td>${i + 1}</td>
+            <td><div class="td-balls" style="gap:2px">${frontBalls}</div></td>
+            <td><div class="td-balls" style="gap:2px">${backBalls}</div></td>
+            <td>${r.count}</td>
+            <td>${r.probability}</td>
+            <td>${r.appeared ? '<span style="color:#27ae60">已开</span>' : '<span style="color:#999">未开</span>'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div></div>';
+
+    // 最高概率
+    html += `<div class="random-result-section">
+        <div class="random-result-title">出现概率最高的 ${highest.length} 注</div>
+        <div class="table-wrap"><table class="random-result-table"><thead><tr><th>排名</th><th>前区</th><th>后区</th><th>出现次数</th><th>概率</th><th>历史</th></tr></thead><tbody>`;
+    highest.forEach((r, i) => {
+        const frontBalls = r.front.map(n => `<span class="td-ball front" style="width:20px;height:20px;font-size:0.62rem">${pad2(n)}</span>`).join('');
+        const backBalls = r.back.map(n => `<span class="td-ball back" style="width:20px;height:20px;font-size:0.62rem">${pad2(n)}</span>`).join('');
+        html += `<tr>
+            <td>${i + 1}</td>
+            <td><div class="td-balls" style="gap:2px">${frontBalls}</div></td>
+            <td><div class="td-balls" style="gap:2px">${backBalls}</div></td>
+            <td>${r.count}</td>
+            <td>${r.probability}</td>
+            <td>${r.appeared ? '<span style="color:#27ae60">已开</span>' : '<span style="color:#999">未开</span>'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div></div>';
+
+    // 随机未开奖
+    html += `<div class="random-result-section">
+        <div class="random-result-title">从未开奖组合中随机选取 ${unopened.length} 注</div>
+        <div style="font-size:0.72rem;color:var(--text-light);margin-bottom:6px">逻辑：从所有未在历史开奖中出现的组合中，使用Fisher-Yates洗牌随机选取，每次选取完全随机</div>`;
+    if (unopened.length) {
+        html += '<div style="display:flex;flex-direction:column;gap:8px">';
+        unopened.forEach((r, i) => {
+            const frontBalls = r.front.map(n => `<span class="td-ball front">${pad2(n)}</span>`).join('');
+            const backBalls = r.back.map(n => `<span class="td-ball back">${pad2(n)}</span>`).join('');
+            html += `<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#e8f5e9;border-radius:8px">
+                <span style="font-size:0.76rem;font-weight:600;color:var(--text-light);min-width:30px">#${i+1}</span>
+                <div class="td-balls">${frontBalls}</div>
+                <span style="width:6px"></span>
+                <div class="td-balls">${backBalls}</div>
+            </div>`;
+        });
+        html += '</div>';
+    } else {
+        html += '<p style="color:var(--text-light)">未找到足够的未开奖组合</p>';
+    }
+    html += '</div>';
+
+    el.innerHTML = html;
+}
+
+// ── 历史数据（本地 txt） ──
+let allHistoryData = [];
+let filteredHistoryData = [];
+let searchTimer = null;
+let pickerSelectedFront = new Set();
+let pickerSelectedBack = new Set();
+let pickerInitialized = false;
+
+async function loadHistory(page) {
+    currentPage = page;
+    const body = document.getElementById('historyBody');
+
+    if (!allHistoryData.length) {
+        body.innerHTML = '<tr><td colspan="5"><div class="loading"><div class="spinner"></div>加载中...</div></td></tr>';
+        try {
+            const res = await api('/api/local-history');
+            allHistoryData = res.data || [];
+        } catch (e) {
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#e74c3c">加载失败</td></tr>';
+            return;
+        }
+    }
+
+    applyFilter();
+}
+
+function applyFilter() {
+    const type = document.getElementById('searchType').value;
+    const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+    const infoEl = document.getElementById('searchResultInfo');
+
+    if (!keyword || type === 'all') {
+        filteredHistoryData = allHistoryData;
+        infoEl.textContent = '';
+    } else {
+        filteredHistoryData = allHistoryData.filter(r => {
+            let target = '';
+            switch (type) {
+                case 'period':
+                    target = String(r.period || '');
+                    break;
+                case 'date':
+                    target = String(r.draw_date || '');
+                    break;
+                case 'weekday':
+                    target = String(r.weekday || '');
+                    break;
+            }
+            return target.toLowerCase().includes(keyword);
+        });
+
+        const typeLabel = document.querySelector('#searchType option:checked').textContent;
+        if (filteredHistoryData.length === 0) {
+            infoEl.innerHTML = `<span style="color:#e74c3c">未找到匹配"${keyword}"的记录（${typeLabel}）</span>`;
+        } else {
+            infoEl.textContent = `搜索"${typeLabel}: ${keyword}" → 匹配 ${filteredHistoryData.length} 条`;
+        }
+    }
+
+    renderHistoryPage(currentPage);
+}
+
+function renderHistoryPage(page) {
+    const body = document.getElementById('historyBody');
+    currentPage = page;
+
+    if (!filteredHistoryData.length) {
+        body.innerHTML = '<tr><td colspan="5" class="no-result">无匹配数据</td></tr>';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    const totalPages = Math.ceil(filteredHistoryData.length / pageSize);
+    if (page >= totalPages) page = totalPages - 1;
+    if (page < 0) page = 0;
+
+    const start = page * pageSize;
+    const end = start + pageSize;
+    const pageData = filteredHistoryData.slice(start, end);
+
+    body.innerHTML = pageData.map(r => `
+        <tr>
+            <td class="copyable" onclick="copyText('${r.period}')">${r.period}</td>
+            <td class="date-cell copyable" onclick="copyText('${r.draw_date || ''}')">${r.draw_date || ''}</td>
+            <td class="weekday-cell copyable" onclick="copyText('${r.weekday || ''}')">${r.weekday || ''}</td>
+            <td>${ballsHTML(r.front, [])}</td>
+            <td>${ballsHTML([], r.back)}</td>
+        </tr>
+    `).join('');
+
+    // 为球添加复制事件
+    attachBallCopyEvents();
+
+    const pagEl = document.getElementById('pagination');
+    pagEl.innerHTML = `
+        <button class="page-btn" ${page===0?'disabled':''} onclick="renderHistoryPage(${page-1})">上一页</button>
+        <span class="page-info">${page+1} / ${totalPages}（共${filteredHistoryData.length}条）</span>
+        <button class="page-btn" ${page>=totalPages-1?'disabled':''} onclick="renderHistoryPage(${page+1})">下一页</button>
+    `;
+}
+
+function triggerSearch() {
+    const type = document.getElementById('searchType').value;
+    if (type === 'numbers') {
+        openNumberPicker();
+    } else {
+        currentPage = 0;
+        applyFilter();
+    }
+}
+
+function clearSearchInput() {
+    document.getElementById('searchInput').value = '';
+    updateClearIcon();
+    currentPage = 0;
+    applyFilter();
+}
+
+function updateClearIcon() {
+    const input = document.getElementById('searchInput');
+    const icon = document.getElementById('searchClearIcon');
+    if (input.value.length > 0) {
+        icon.classList.add('show');
+    } else {
+        icon.classList.remove('show');
+    }
+}
+
+// ── 号码选择弹窗 ──
+function initNumberPicker() {
+    if (pickerInitialized) return;
+    pickerInitialized = true;
+
+    const frontGrid = document.getElementById('frontPickerGrid');
+    const backGrid = document.getElementById('backPickerGrid');
+
+    let html = '';
+    for (let i = 1; i <= 35; i++) {
+        html += `<div class="picker-ball front" data-num="${i}" onclick="togglePickerBall(this, 'front')">${pad2(i)}</div>`;
+    }
+    frontGrid.innerHTML = html;
+
+    html = '';
+    for (let i = 1; i <= 12; i++) {
+        html += `<div class="picker-ball back" data-num="${i}" onclick="togglePickerBall(this, 'back')">${pad2(i)}</div>`;
+    }
+    backGrid.innerHTML = html;
+}
+
+function openNumberPicker() {
+    initNumberPicker();
+    document.getElementById('pickerOverlay').classList.add('show');
+    updatePickerInfo();
+}
+
+function closePickerOnOverlay(event) {
+    if (event.target === document.getElementById('pickerOverlay')) {
+        document.getElementById('pickerOverlay').classList.remove('show');
+    }
+}
+
+function togglePickerBall(el, type) {
+    const num = parseInt(el.dataset.num);
+    const selected = el.classList.contains('selected');
+
+    if (selected) {
+        el.classList.remove('selected');
+        if (type === 'front') pickerSelectedFront.delete(num);
+        else pickerSelectedBack.delete(num);
+    } else {
+        el.classList.add('selected');
+        if (type === 'front') pickerSelectedFront.add(num);
+        else pickerSelectedBack.add(num);
+    }
+    updatePickerInfo();
+}
+
+function updatePickerInfo() {
+    const el = document.getElementById('pickerSelectedInfo');
+    const frontArr = Array.from(pickerSelectedFront).sort((a,b)=>a-b);
+    const backArr = Array.from(pickerSelectedBack).sort((a,b)=>a-b);
+    const parts = [];
+    if (frontArr.length) parts.push('前区: ' + frontArr.map(n=>pad2(n)).join(' '));
+    if (backArr.length) parts.push('后区: ' + backArr.map(n=>pad2(n)).join(' '));
+    el.textContent = parts.length ? parts.join('  |  ') : '未选择任何号码';
+}
+
+function clearPickerSelection() {
+    pickerSelectedFront.clear();
+    pickerSelectedBack.clear();
+    document.querySelectorAll('.picker-ball.selected').forEach(el => el.classList.remove('selected'));
+    updatePickerInfo();
+}
+
+function searchByNumbers() {
+    const frontArr = Array.from(pickerSelectedFront);
+    const backArr = Array.from(pickerSelectedBack);
+
+    const infoEl = document.getElementById('searchResultInfo');
+
+    if (!frontArr.length && !backArr.length) {
+        filteredHistoryData = allHistoryData;
+        infoEl.textContent = '';
+    } else {
+        filteredHistoryData = allHistoryData.filter(r => {
+            const frontSet = new Set(r.front || []);
+            const backSet = new Set(r.back || []);
+            const frontMatch = frontArr.every(n => frontSet.has(n));
+            const backMatch = backArr.every(n => backSet.has(n));
+            return frontMatch && backMatch;
+        });
+
+        const frontStr = frontArr.length ? '前区 ' + frontArr.sort((a,b)=>a-b).map(n=>pad2(n)).join(' ') : '';
+        const backStr = backArr.length ? '后区 ' + backArr.sort((a,b)=>a-b).map(n=>pad2(n)).join(' ') : '';
+        const desc = [frontStr, backStr].filter(Boolean).join(' + ');
+
+        if (filteredHistoryData.length === 0) {
+            infoEl.innerHTML = `<span style="color:#e74c3c">未找到包含 ${desc} 的记录</span>`;
+        } else {
+            infoEl.textContent = `号码搜索: ${desc} → 匹配 ${filteredHistoryData.length} 条`;
+        }
+    }
+
+    document.getElementById('pickerOverlay').classList.remove('show');
+    currentPage = 0;
+    renderHistoryPage(0);
+}
+
+// ── 复制功能 ──
+function copyText(text) {
+    if (!text) return;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => showCopyFeedback());
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showCopyFeedback(); } catch(e) {}
+        document.body.removeChild(ta);
+    }
+}
+
+function showCopyFeedback() {
+    const el = document.getElementById('copyFeedback');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1000);
+}
+
+function attachBallCopyEvents() {
+    document.querySelectorAll('.td-ball').forEach(ball => {
+        ball.classList.add('copyable');
+        let longPressTimer = null;
+
+        // 桌面端点击复制
+        ball.addEventListener('click', function(e) {
+            copyText(this.textContent.trim());
+        });
+
+        // 移动端长按复制
+        ball.addEventListener('touchstart', function(e) {
+            const text = this.textContent.trim();
+            longPressTimer = setTimeout(() => {
+                copyText(text);
+                e.preventDefault();
+            }, 500);
+        }, { passive: true });
+
+        ball.addEventListener('touchend', function() {
+            clearTimeout(longPressTimer);
+        });
+
+        ball.addEventListener('touchmove', function() {
+            clearTimeout(longPressTimer);
+        });
+    });
+}
+
+// 搜索输入事件（带防抖）
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const searchType = document.getElementById('searchType');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            updateClearIcon();
+            if (document.getElementById('searchType').value === 'numbers') return;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function() {
+                currentPage = 0;
+                applyFilter();
+            }, 250);
+        });
+    }
+    if (searchType) {
+        searchType.addEventListener('change', function() {
+            const input = document.getElementById('searchInput');
+            const clearIcon = document.getElementById('searchClearIcon');
+            if (this.value === 'numbers') {
+                input.value = '';
+                input.placeholder = '点击「搜索」打开号盘选择...';
+                input.classList.add('readonly-style');
+                input.setAttribute('readonly', '');
+                clearIcon.classList.remove('show');
+            } else {
+                input.removeAttribute('readonly');
+                input.classList.remove('readonly-style');
+                input.placeholder = '输入关键词，支持模糊搜索...';
+                updateClearIcon();
+                pickerSelectedFront.clear();
+                pickerSelectedBack.clear();
+            }
+            currentPage = 0;
+            applyFilter();
+        });
+    }
+});
+
+// ── 复盘 ──
+let reviewSelectedPeriod = null;
+let reviewSelectedPeriodData = null;
+
+function updateReviewSubmitBtn() {
+    const btn = document.getElementById('reviewSubmitBtn');
+    btn.disabled = !reviewSelectedPeriod;
+}
+
+// ── 期号选择弹窗 ──
+async function openPeriodPicker() {
+    document.getElementById('periodPickerOverlay').classList.add('show');
+    const listEl = document.getElementById('periodList');
+    listEl.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+    if (!allHistoryData.length) {
+        try {
+            const res = await api('/api/local-history');
+            allHistoryData = res.data || [];
+        } catch (e) {
+            listEl.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+            return;
+        }
+    }
+
+    document.getElementById('periodSearchInput').value = '';
+    document.getElementById('periodSearchClear').classList.remove('show');
+    renderPeriodList(allHistoryData.slice(0, 10));
+}
+
+function closePeriodPickerOnOverlay(event) {
+    if (event.target === document.getElementById('periodPickerOverlay')) {
+        closePeriodPicker();
+    }
+}
+
+function closePeriodPicker() {
+    document.getElementById('periodPickerOverlay').classList.remove('show');
+}
+
+function renderPeriodList(data) {
+    const listEl = document.getElementById('periodList');
+    if (!data.length) {
+        listEl.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px 0">无匹配数据</p>';
+        return;
+    }
+
+    let html = '';
+    data.forEach(r => {
+        const isSelected = reviewSelectedPeriod === r.period;
+        const frontBalls = (r.front || []).map(n => `<span class="mini-ball front">${pad2(n)}</span>`).join('');
+        const backBalls = (r.back || []).map(n => `<span class="mini-ball back">${pad2(n)}</span>`).join('');
+        html += `
+            <div class="period-item ${isSelected ? 'selected' : ''}" onclick="selectPeriodItem('${r.period}')">
+                <div class="period-radio"></div>
+                <div class="period-item-info">
+                    <span class="period-item-period">${r.period}</span>
+                    <span class="period-item-date">${r.draw_date || ''} ${r.weekday || ''}</span>
+                    <div class="period-item-balls">${frontBalls}<span style="width:4px"></span>${backBalls}</div>
+                </div>
+            </div>
+        `;
+    });
+    listEl.innerHTML = html;
+}
+
+function selectPeriodItem(period) {
+    reviewSelectedPeriod = period;
+    reviewSelectedPeriodData = allHistoryData.find(r => r.period === period) || null;
+    renderPeriodList(getFilteredPeriodList());
+}
+
+function getFilteredPeriodList() {
+    const keyword = document.getElementById('periodSearchInput').value.trim().toLowerCase();
+    if (!keyword) return allHistoryData.slice(0, 10);
+    return allHistoryData.filter(r => String(r.period || '').toLowerCase().includes(keyword)).slice(0, 10);
+}
+
+function filterPeriodList() {
+    const input = document.getElementById('periodSearchInput');
+    const clearIcon = document.getElementById('periodSearchClear');
+    if (input.value.length > 0) clearIcon.classList.add('show');
+    else clearIcon.classList.remove('show');
+    renderPeriodList(getFilteredPeriodList());
+}
+
+function clearPeriodSearch() {
+    document.getElementById('periodSearchInput').value = '';
+    document.getElementById('periodSearchClear').classList.remove('show');
+    renderPeriodList(getFilteredPeriodList());
+}
+
+function submitPeriodPicker() {
+    if (!reviewSelectedPeriod) {
+        showToast('请先选择一个期号');
+        return;
+    }
+    const display = document.getElementById('reviewPeriodDisplay');
+    display.classList.add('filled');
+    display.innerHTML = `<span style="font-weight:700;color:var(--text)">${reviewSelectedPeriod}</span>`;
+
+    // 显示该期开奖号码
+    const actualSection = document.getElementById('reviewActualSection');
+    const actualDisplay = document.getElementById('reviewActualDisplay');
+    if (reviewSelectedPeriodData) {
+        const frontArr = reviewSelectedPeriodData.front || [];
+        const backArr = reviewSelectedPeriodData.back || [];
+        actualDisplay.innerHTML = frontArr.map(n => `<span class="td-ball front">${pad2(n)}</span>`).join('') +
+            '<span style="width:6px"></span>' +
+            backArr.map(n => `<span class="td-ball back">${pad2(n)}</span>`).join('');
+        actualSection.style.display = 'block';
+    } else {
+        actualSection.style.display = 'none';
+    }
+
+    closePeriodPicker();
+    updateReviewSubmitBtn();
+}
+
+async function doReview() {
+    if (!reviewSelectedPeriod) return;
+
+    try {
+        const res = await fetch('/api/review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ period: reviewSelectedPeriod })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+        renderReviewResult(data);
+        showToast('复盘完成');
+    } catch (e) {
+        showToast('网络错误');
+    }
+}
+
+function renderReviewResult(data) {
+    const card = document.getElementById('reviewResultCard');
+    const el = document.getElementById('reviewResultContent');
+    card.style.display = 'block';
+
+    let html = `
+        <div style="margin-bottom:12px">
+            <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:6px">第 ${data.period} 期开奖号码:</div>
+            ${fullBallsHTML(data.actual_front, data.actual_back)}
+        </div>
+    `;
+
+    (data.results || []).forEach(r => {
+        const isWin = r.prize !== '未中奖';
+        html += `
+            <div class="review-result-item">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-weight:600;font-size:0.85rem">第${r.idx}组</span>
+                    <div class="balls-mini">
+                        ${r.front.map(n=>`<span class="td-ball front" style="background:${data.actual_front.includes(n)?'#27ae60':'#e74c3c'}">${pad2(n)}</span>`).join('')}
+                        <span style="width:6px"></span>
+                        ${r.back.map(n=>`<span class="td-ball back" style="background:${data.actual_back.includes(n)?'#27ae60':'#3498db'}">${pad2(n)}</span>`).join('')}
+                    </div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:0.78rem;color:var(--text-light)">前${r.hit_front}/5 后${r.hit_back}/2</div>
+                    <span class="prize-tag ${isWin?'prize-win':'prize-lose'}">${r.prize}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    el.innerHTML = html;
+}
+
+// ── 开奖兑奖 ──
+let prizeSelectedPeriod = null;
+let prizeSelectedPeriodData = null;
+let prizeBetSets = []; // [{front: Set, back: Set}, ...]
+let prizePickerInitialized = false;
+let prizeEditingSetIdx = -1; // 当前编辑的组索引
+
+function updatePrizeSubmitBtn() {
+    const btn = document.getElementById('prizeSubmitBtn');
+    const ready = prizeSelectedPeriod && prizeBetSets.some(s => s.front.size >= 5 && s.back.size >= 2);
+    btn.disabled = !ready;
+}
+
+// ── 兑奖期号选择弹窗 ──
+async function openPrizePeriodPicker() {
+    document.getElementById('prizePeriodOverlay').classList.add('show');
+    const listEl = document.getElementById('prizePeriodList');
+    listEl.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+    if (!allHistoryData.length) {
+        try {
+            const res = await api('/api/local-history');
+            allHistoryData = res.data || [];
+        } catch (e) {
+            listEl.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+            return;
+        }
+    }
+
+    if (!prizeSelectedPeriod && allHistoryData.length) {
+        prizeSelectedPeriod = allHistoryData[0].period;
+        prizeSelectedPeriodData = allHistoryData[0];
+    }
+
+    document.getElementById('prizePeriodSearchInput').value = '';
+    document.getElementById('prizePeriodSearchClear').classList.remove('show');
+    renderPrizePeriodList(getPrizeFilteredPeriodList());
+}
+
+function closePrizePeriodOnOverlay(event) {
+    if (event.target === document.getElementById('prizePeriodOverlay')) {
+        closePrizePeriodPicker();
+    }
+}
+
+function closePrizePeriodPicker() {
+    document.getElementById('prizePeriodOverlay').classList.remove('show');
+}
+
+function getPrizeFilteredPeriodList() {
+    const keyword = document.getElementById('prizePeriodSearchInput').value.trim().toLowerCase();
+    if (!keyword) return allHistoryData.slice(0, 10);
+    return allHistoryData.filter(r => String(r.period || '').toLowerCase().includes(keyword)).slice(0, 10);
+}
+
+function renderPrizePeriodList(data) {
+    const listEl = document.getElementById('prizePeriodList');
+    if (!data.length) {
+        listEl.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px 0">无匹配数据</p>';
+        return;
+    }
+
+    let html = '';
+    data.forEach(r => {
+        const isSelected = prizeSelectedPeriod === r.period;
+        const frontBalls = (r.front || []).map(n => `<span class="mini-ball front">${pad2(n)}</span>`).join('');
+        const backBalls = (r.back || []).map(n => `<span class="mini-ball back">${pad2(n)}</span>`).join('');
+        html += `
+            <div class="period-item ${isSelected ? 'selected' : ''}" onclick="selectPrizePeriodItem('${r.period}')">
+                <div class="period-radio"></div>
+                <div class="period-item-info">
+                    <span class="period-item-period">${r.period}</span>
+                    <span class="period-item-date">${r.draw_date || ''} ${r.weekday || ''}</span>
+                    <div class="period-item-balls">${frontBalls}<span style="width:4px"></span>${backBalls}</div>
+                </div>
+            </div>
+        `;
+    });
+    listEl.innerHTML = html;
+}
+
+function selectPrizePeriodItem(period) {
+    prizeSelectedPeriod = period;
+    prizeSelectedPeriodData = allHistoryData.find(r => r.period === period) || null;
+    renderPrizePeriodList(getPrizeFilteredPeriodList());
+}
+
+function filterPrizePeriodList() {
+    const input = document.getElementById('prizePeriodSearchInput');
+    const clearIcon = document.getElementById('prizePeriodSearchClear');
+    if (input.value.length > 0) clearIcon.classList.add('show');
+    else clearIcon.classList.remove('show');
+    renderPrizePeriodList(getPrizeFilteredPeriodList());
+}
+
+function clearPrizePeriodSearch() {
+    document.getElementById('prizePeriodSearchInput').value = '';
+    document.getElementById('prizePeriodSearchClear').classList.remove('show');
+    renderPrizePeriodList(getPrizeFilteredPeriodList());
+}
+
+function submitPrizePeriodPicker() {
+    if (!prizeSelectedPeriod) {
+        showToast('请先选择一个期号');
+        return;
+    }
+    const display = document.getElementById('prizePeriodDisplay');
+    display.classList.add('filled');
+    display.innerHTML = `<span style="font-weight:700;color:var(--text)">${prizeSelectedPeriod}</span>`;
+
+    const actualSection = document.getElementById('prizeActualSection');
+    const actualDisplay = document.getElementById('prizeActualDisplay');
+    if (prizeSelectedPeriodData) {
+        const frontArr = prizeSelectedPeriodData.front || [];
+        const backArr = prizeSelectedPeriodData.back || [];
+        actualDisplay.innerHTML = frontArr.map(n => `<span class="td-ball front">${pad2(n)}</span>`).join('') +
+            '<span style="width:6px"></span>' +
+            backArr.map(n => `<span class="td-ball back">${pad2(n)}</span>`).join('');
+        actualSection.style.display = 'block';
+    } else {
+        actualSection.style.display = 'none';
+    }
+
+    closePrizePeriodPicker();
+    updatePrizeSubmitBtn();
+}
+
+// ── 多组号码管理 ──
+function addPrizeBetSet() {
+    prizeBetSets.push({ front: new Set(), back: new Set() });
+    renderPrizeBetSets();
+    // 自动打开新组的选号弹窗
+    openPrizePicker(prizeBetSets.length - 1);
+}
+
+function removePrizeBetSet(idx) {
+    prizeBetSets.splice(idx, 1);
+    renderPrizeBetSets();
+    updatePrizeSubmitBtn();
+}
+
+function renderPrizeBetSets() {
+    const container = document.getElementById('prizeBetSetsContainer');
+    if (!prizeBetSets.length) {
+        container.innerHTML = '<div style="font-size:0.8rem;color:var(--text-light);padding:8px 0">点击下方"+"添加一组号码</div>';
+        return;
+    }
+
+    let html = '';
+    prizeBetSets.forEach((s, i) => {
+        const frontArr = Array.from(s.front).sort((a,b)=>a-b);
+        const backArr = Array.from(s.back).sort((a,b)=>a-b);
+        const filled = frontArr.length >= 5 && backArr.length >= 2;
+        const isMulti = frontArr.length > 5 || backArr.length > 2;
+        const tagText = filled ? (isMulti ? '复式 ' + frontArr.length + '+' + backArr.length : '单式') : '';
+
+        let ballsHtml = '<span style="color:var(--text-light);font-size:0.8rem">点击选择号码</span>';
+        if (frontArr.length || backArr.length) {
+            ballsHtml = frontArr.map(n => `<span class="td-ball front">${pad2(n)}</span>`).join('') +
+                (backArr.length ? '<span style="width:6px"></span>' : '') +
+                backArr.map(n => `<span class="td-ball back">${pad2(n)}</span>`).join('');
+        }
+
+        html += `
+            <div class="prize-bet-set">
+                <div class="prize-bet-set-header">
+                    <span class="prize-bet-set-label">第${i+1}组 <span class="prize-bet-set-tag">${tagText}</span></span>
+                    ${prizeBetSets.length > 1 ? `<button class="prize-bet-set-remove" onclick="removePrizeBetSet(${i})">&times;</button>` : ''}
+                </div>
+                <div class="review-display-box ${filled?'filled':''}" onclick="openPrizePicker(${i})">
+                    ${ballsHtml}
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+// ── 兑奖号码选择弹窗 ──
+function initPrizePicker() {
+    if (prizePickerInitialized) return;
+    prizePickerInitialized = true;
+
+    const frontGrid = document.getElementById('prizeFrontGrid');
+    const backGrid = document.getElementById('prizeBackGrid');
+
+    let html = '';
+    for (let i = 1; i <= 35; i++) {
+        html += `<div class="picker-ball front" data-num="${i}" onclick="togglePrizeBall(this, 'front')">${pad2(i)}</div>`;
+    }
+    frontGrid.innerHTML = html;
+
+    html = '';
+    for (let i = 1; i <= 12; i++) {
+        html += `<div class="picker-ball back" data-num="${i}" onclick="togglePrizeBall(this, 'back')">${pad2(i)}</div>`;
+    }
+    backGrid.innerHTML = html;
+}
+
+function openPrizePicker(idx) {
+    initPrizePicker();
+    prizeEditingSetIdx = idx;
+
+    // 确保该组存在
+    if (!prizeBetSets[idx]) {
+        prizeBetSets[idx] = { front: new Set(), back: new Set() };
+    }
+
+    const s = prizeBetSets[idx];
+    document.querySelectorAll('#prizeFrontGrid .picker-ball').forEach(el => {
+        const num = parseInt(el.dataset.num);
+        if (s.front.has(num)) el.classList.add('selected');
+        else el.classList.remove('selected');
+    });
+    document.querySelectorAll('#prizeBackGrid .picker-ball').forEach(el => {
+        const num = parseInt(el.dataset.num);
+        if (s.back.has(num)) el.classList.add('selected');
+        else el.classList.remove('selected');
+    });
+    updatePrizePickerInfo();
+    document.getElementById('prizePickerOverlay').classList.add('show');
+}
+
+function closePrizePickerOnOverlay(event) {
+    if (event.target === document.getElementById('prizePickerOverlay')) {
+        document.getElementById('prizePickerOverlay').classList.remove('show');
+    }
+}
+
+function togglePrizeBall(el, type) {
+    const num = parseInt(el.dataset.num);
+    const selected = el.classList.contains('selected');
+    const s = prizeBetSets[prizeEditingSetIdx];
+
+    if (selected) {
+        el.classList.remove('selected');
+        if (type === 'front') s.front.delete(num);
+        else s.back.delete(num);
+    } else {
+        el.classList.add('selected');
+        if (type === 'front') s.front.add(num);
+        else s.back.add(num);
+    }
+    updatePrizePickerInfo();
+}
+
+function updatePrizePickerInfo() {
+    const el = document.getElementById('prizePickerInfo');
+    const s = prizeBetSets[prizeEditingSetIdx];
+    if (!s) return;
+    const frontArr = Array.from(s.front).sort((a,b)=>a-b);
+    const backArr = Array.from(s.back).sort((a,b)=>a-b);
+    const parts = [];
+    if (frontArr.length) parts.push('前区(' + frontArr.length + '): ' + frontArr.map(n=>pad2(n)).join(' '));
+    if (backArr.length) parts.push('后区(' + backArr.length + '): ' + backArr.map(n=>pad2(n)).join(' '));
+
+    let note = '前区至少5个，后区至少2个';
+    if (frontArr.length >= 5 && backArr.length >= 2) {
+        const bets = comb(frontArr.length, 5) * comb(backArr.length, 2);
+        note = '共 ' + bets + ' 注，需 ' + (bets * 2) + ' 元';
+    }
+    el.textContent = parts.length ? parts.join('  |  ') + '  →  ' + note : '未选择任何号码（' + note + '）';
+}
+
+function comb(n, k) {
+    if (n < k) return 0;
+    let r = 1;
+    for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+    return Math.round(r);
+}
+
+function clearPrizePicker() {
+    const s = prizeBetSets[prizeEditingSetIdx];
+    if (!s) return;
+    s.front.clear();
+    s.back.clear();
+    document.querySelectorAll('#prizeFrontGrid .picker-ball.selected, #prizeBackGrid .picker-ball.selected').forEach(el => el.classList.remove('selected'));
+    updatePrizePickerInfo();
+}
+
+function submitPrizePicker() {
+    const s = prizeBetSets[prizeEditingSetIdx];
+    if (!s) return;
+    if (s.front.size < 5) {
+        showToast('前区至少选5个号码');
+        return;
+    }
+    if (s.back.size < 2) {
+        showToast('后区至少选2个号码');
+        return;
+    }
+    document.getElementById('prizePickerOverlay').classList.remove('show');
+    renderPrizeBetSets();
+    updatePrizeSubmitBtn();
+}
+
+async function doPrizeCheck() {
+    if (!prizeSelectedPeriod) return;
+
+    const validSets = prizeBetSets.filter(s => s.front.size >= 5 && s.back.size >= 2);
+    if (!validSets.length) return;
+
+    const bet_sets = validSets.map(s => ({
+        front: Array.from(s.front).sort((a,b)=>a-b),
+        back: Array.from(s.back).sort((a,b)=>a-b)
+    }));
+
+    try {
+        const res = await fetch('/api/prize-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ period: prizeSelectedPeriod, bet_sets })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error); return; }
+        renderPrizeResult(data);
+        showToast('兑奖完成');
+    } catch (e) {
+        showToast('网络错误');
+    }
+}
+
+function renderPrizeResult(data) {
+    const card = document.getElementById('prizeResultCard');
+    const el = document.getElementById('prizeResultContent');
+    card.style.display = 'block';
+
+    const actualFront = data.actual_front || [];
+    const actualBack = data.actual_back || [];
+
+    let html = `
+        <div style="margin-bottom:14px">
+            <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:6px">第 ${data.period} 期开奖号码:</div>
+            ${fullBallsHTML(actualFront, actualBack)}
+        </div>
+    `;
+
+    // 汇总
+    const totalCost = data.total_cost || 0;
+    const totalPrize = data.total_prize || 0;
+    html += `
+        <div class="stat-grid" style="margin-bottom:14px">
+            <div class="stat-item"><div class="stat-label">总投注金额</div><div class="stat-value" style="font-size:1rem">${totalCost}元</div></div>
+            <div class="stat-item"><div class="stat-label">固定奖金合计</div><div class="stat-value" style="font-size:1rem">${totalPrize}元</div></div>
+        </div>
+    `;
+
+    // 每组结果
+    (data.sets || []).forEach(s => {
+        const summary = s.prize_summary || {};
+        const summaryKeys = Object.keys(summary);
+        const isMulti = s.is_multi;
+        const userFront = s.user_front || [];
+        const userBack = s.user_back || [];
+
+        html += `
+            <div class="prize-bet-set" style="border-color:var(--border)">
+                <div class="prize-bet-set-header">
+                    <span class="prize-bet-set-label">第${s.set_idx}组 <span class="prize-bet-set-tag">${isMulti ? '复式' : '单式'} ${s.total_bets}注 ${s.total_cost}元</span></span>
+                </div>
+                <div style="margin-bottom:8px">
+                    <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:4px">您的号码（命中绿色，未命中红/蓝）:</div>
+                    <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+                        ${userFront.map(n => {
+                            const hit = actualFront.includes(n);
+                            return `<span class="td-ball front" style="${hit?'background:#27ae60;box-shadow:0 2px 6px rgba(39,174,96,0.4)':''}">${pad2(n)}</span>`;
+                        }).join('')}
+                        <span style="width:6px"></span>
+                        ${userBack.map(n => {
+                            const hit = actualBack.includes(n);
+                            return `<span class="td-ball back" style="${hit?'background:#27ae60;box-shadow:0 2px 6px rgba(39,174,96,0.4)':''}">${pad2(n)}</span>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:6px">
+                    前区命中 ${s.hit_front}/${userFront.length}，后区命中 ${s.hit_back}/${userBack.length}
+                </div>
+        `;
+
+        if (summaryKeys.length === 0) {
+            html += '<span class="prize-tag prize-lose">未中奖</span>';
+        } else {
+            summaryKeys.forEach(level => {
+                const info = summary[level];
+                html += `
+                    <div class="review-result-item" style="padding:6px 0">
+                        <span class="prize-tag prize-win">${level}</span>
+                        <span style="font-size:0.85rem;color:var(--text)">×${info.count} 注</span>
+                        <span style="font-size:0.82rem;color:var(--text-light);margin-left:auto">${info.amount_text}</span>
+                    </div>
+                `;
+            });
+
+            if (s.total_prize > 0) {
+                const profit = s.net_profit;
+                const profitColor = profit >= 0 ? '#27ae60' : '#e74c3c';
+                html += `
+                    <div style="text-align:center;padding:8px;background:#f8f9fa;border-radius:8px;margin-top:6px">
+                        <span style="font-size:0.8rem;color:var(--text-light)">固定奖金: </span>
+                        <strong style="color:#27ae60;font-size:0.95rem">${s.total_prize}元</strong>
+                        <span style="font-size:0.76rem;color:${profitColor};margin-left:6px">(${profit >= 0 ? '盈' : '亏'}${Math.abs(profit)})</span>
+                    </div>
+                `;
+            }
+        }
+
+        // 复式中奖明细
+        if (isMulti && s.all_results && s.all_results.length > 0 && s.all_results.length <= 20) {
+            html += '<div style="margin-top:8px"><div style="font-size:0.78rem;font-weight:600;margin-bottom:4px">中奖明细:</div>';
+            s.all_results.forEach(r => {
+                html += `
+                    <div class="review-result-item" style="padding:4px 0">
+                        <div class="balls-mini">
+                            ${r.front.map(n=>`<span class="td-ball front" style="width:24px;height:24px;font-size:0.7rem;${actualFront.includes(n)?'background:#27ae60':'background:#e74c3c'}">${pad2(n)}</span>`).join('')}
+                            <span style="width:4px"></span>
+                            ${r.back.map(n=>`<span class="td-ball back" style="width:24px;height:24px;font-size:0.7rem;${actualBack.includes(n)?'background:#27ae60':'background:#3498db'}">${pad2(n)}</span>`).join('')}
+                        </div>
+                        <span class="prize-tag prize-win" style="margin-left:auto;font-size:0.7rem">${r.prize}</span>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+    });
+
+    // 总盈亏
+    if (totalPrize > 0 || totalCost > 0) {
+        const totalProfit = data.net_profit || 0;
+        const profitColor = totalProfit >= 0 ? '#27ae60' : '#e74c3c';
+        html += `
+            <div style="text-align:center;padding:14px;background:#f8f9fa;border-radius:10px;margin-top:10px">
+                <div style="font-size:0.85rem;color:var(--text-light)">全部合计: 投入 <strong>${totalCost}元</strong>，固定奖金 <strong style="color:#27ae60">${totalPrize}元</strong></div>
+                <div style="font-size:0.85rem;color:${profitColor};margin-top:4px;font-weight:600">${totalProfit >= 0 ? '盈利' : '亏损'} ${Math.abs(totalProfit)} 元</div>
+                <div style="font-size:0.72rem;color:var(--text-light);margin-top:4px">注：一、二等奖为浮动奖金，未计入</div>
+            </div>
+        `;
+    }
+
+    el.innerHTML = html;
+}
+
+function resetPrizeCheck() {
+    prizeSelectedPeriod = null;
+    prizeSelectedPeriodData = null;
+    prizeBetSets = [];
+
+    const periodDisplay = document.getElementById('prizePeriodDisplay');
+    periodDisplay.classList.remove('filled');
+    periodDisplay.innerHTML = '<span style="color:var(--text-light)">点击选择期号</span>';
+
+    renderPrizeBetSets();
+    document.getElementById('prizeActualSection').style.display = 'none';
+    document.getElementById('prizeResultCard').style.display = 'none';
+    updatePrizeSubmitBtn();
+}
+
+// ── 玩法规则 ──
+async function loadPrizeRules() {
+    const rulesEl = document.getElementById('prizeRulesContent');
+    const levelsEl = document.getElementById('prizeLevelsContent');
+    try {
+        const data = await api('/api/prize-rules');
+
+        let rulesHtml = '';
+        (data.rules || []).forEach(r => {
+            rulesHtml += `
+                <div style="margin-bottom:10px">
+                    <div style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:2px">${r.section}</div>
+                    <div style="font-size:0.8rem;color:var(--text-light);line-height:1.6">${r.content}</div>
+                </div>
+            `;
+        });
+        rulesEl.innerHTML = rulesHtml;
+
+        let levelsHtml = '<div class="table-wrap"><table><thead><tr><th>奖级</th><th>命中条件</th><th>奖金</th></tr></thead><tbody>';
+        (data.prize_levels || []).forEach(p => {
+            levelsHtml += `<tr><td style="font-weight:600">${p.level}</td><td style="font-size:0.78rem">${p.condition}</td><td style="font-size:0.78rem">${p.amount}</td></tr>`;
+        });
+        levelsHtml += '</tbody></table></div>';
+        levelsEl.innerHTML = levelsHtml;
+    } catch (e) {
+        rulesEl.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+        levelsEl.innerHTML = '<p style="text-align:center;color:#e74c3c">加载失败</p>';
+    }
+}
+
+// ── 初始化 ──
+loadLatest();
+loadPrizeRules();
+</script>
+
+</body>
+</html>

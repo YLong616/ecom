@@ -1,0 +1,6546 @@
+[
+  {
+    "generated_at": "2026-08-19T16:46:11.104318",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          3,
+          8,
+          9,
+          13,
+          18
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 51,
+        "span": 15
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          4,
+          8,
+          9,
+          18
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 42,
+        "span": 15
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          8,
+          20,
+          25,
+          28
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 26
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          18,
+          25,
+          32,
+          33
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 112,
+        "span": 29
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          3,
+          8,
+          9,
+          13,
+          18
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          4,
+          8,
+          9,
+          18
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "hit_front": 1,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          8,
+          20,
+          25,
+          28
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          18,
+          25,
+          32,
+          33
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T16:46:23.431734",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          8,
+          12,
+          13,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 70,
+        "span": 27
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          18,
+          27,
+          29
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          7,
+          23,
+          25,
+          27
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 26
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          6,
+          9,
+          13,
+          18
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 51,
+        "span": 13
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          8,
+          12,
+          13,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          18,
+          27,
+          29
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          7,
+          23,
+          25,
+          27
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          6,
+          9,
+          13,
+          18
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T16:47:12.285973",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          9,
+          27,
+          29
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 68,
+        "span": 28
+      },
+      {
+        "idx": 2,
+        "front": [
+          5,
+          16,
+          25,
+          27,
+          28
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 101,
+        "span": 23
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          12,
+          13,
+          18,
+          25
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 70,
+        "span": 23
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          9,
+          29,
+          32
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:14.106306",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          9,
+          18,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 87,
+        "span": 23
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          5,
+          8,
+          25,
+          28
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 27
+      },
+      {
+        "idx": 3,
+        "front": [
+          3,
+          4,
+          7,
+          9,
+          18
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 41,
+        "span": 15
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          7,
+          13,
+          25,
+          27
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 74,
+        "span": 25
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:14.686852",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          3,
+          7,
+          9,
+          27
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 47,
+        "span": 26
+      },
+      {
+        "idx": 2,
+        "front": [
+          5,
+          18,
+          27,
+          32,
+          33
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 115,
+        "span": 28
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          5,
+          9,
+          29
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 46,
+        "span": 28
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          3,
+          5,
+          7,
+          9
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 0,
+        "small_count": 5,
+        "sum": 25,
+        "span": 8
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:15.071070",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          13,
+          25,
+          31
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 30
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          16,
+          18,
+          32,
+          34
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 0,
+        "even_count": 5,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 102,
+        "span": 32
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          3,
+          25,
+          27,
+          29
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 85,
+        "span": 28
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          9,
+          15,
+          24,
+          27
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 80,
+        "span": 22
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:15.736722",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          13,
+          18,
+          20
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 57,
+        "span": 19
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          9,
+          11,
+          20,
+          30
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 77,
+        "span": 23
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          5,
+          8,
+          18,
+          32
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 28
+      },
+      {
+        "idx": 4,
+        "front": [
+          3,
+          4,
+          7,
+          9,
+          35
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 58,
+        "span": 32
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:28.507211",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          4,
+          7,
+          18,
+          29
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 59,
+        "span": 28
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          20,
+          25,
+          32
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 80,
+        "span": 31
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          8,
+          9,
+          25,
+          29
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 72,
+        "span": 28
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          5,
+          8,
+          27,
+          31
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 27
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:30.090915",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          8,
+          20,
+          25,
+          31
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 89,
+        "span": 26
+      },
+      {
+        "idx": 2,
+        "front": [
+          5,
+          7,
+          8,
+          11,
+          20
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 51,
+        "span": 15
+      },
+      {
+        "idx": 3,
+        "front": [
+          3,
+          9,
+          13,
+          15,
+          18
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 58,
+        "span": 15
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          2,
+          9,
+          13,
+          32
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 57,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:30.746151",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          9,
+          13,
+          15,
+          32
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 71,
+        "span": 30
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          9,
+          18,
+          28,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          8,
+          9,
+          13,
+          28
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 59,
+        "span": 27
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          9,
+          20,
+          34
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 68,
+        "span": 33
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:31.442243",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          7,
+          27,
+          32,
+          35
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 102,
+        "span": 34
+      },
+      {
+        "idx": 2,
+        "front": [
+          5,
+          8,
+          18,
+          27,
+          35
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 93,
+        "span": 30
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          3,
+          5,
+          9,
+          20
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 38,
+        "span": 19
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          9,
+          13,
+          18,
+          30
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 29
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:32.223348",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          9,
+          13,
+          20,
+          25,
+          34
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 101,
+        "span": 25
+      },
+      {
+        "idx": 2,
+        "front": [
+          5,
+          25,
+          26,
+          28,
+          32
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 116,
+        "span": 27
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          4,
+          13,
+          17,
+          18
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 54,
+        "span": 16
+      },
+      {
+        "idx": 4,
+        "front": [
+          7,
+          15,
+          20,
+          25,
+          29
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 96,
+        "span": 22
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:33.222355",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          8,
+          25,
+          27,
+          32
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 30
+      },
+      {
+        "idx": 2,
+        "front": [
+          9,
+          18,
+          25,
+          27,
+          32
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 111,
+        "span": 23
+      },
+      {
+        "idx": 3,
+        "front": [
+          7,
+          8,
+          18,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 88,
+        "span": 21
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          9,
+          18,
+          27,
+          32
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 24
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:33.982953",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          9,
+          16,
+          31,
+          32
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 93,
+        "span": 27
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          5,
+          7,
+          13,
+          27
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 54,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          5,
+          20,
+          25,
+          28,
+          29
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 107,
+        "span": 24
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          3,
+          5,
+          13,
+          25
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 47,
+        "span": 24
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:34.728496",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          4,
+          7,
+          8,
+          26
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 46,
+        "span": 25
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          7,
+          18,
+          29,
+          31
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 86,
+        "span": 30
+      },
+      {
+        "idx": 3,
+        "front": [
+          9,
+          13,
+          18,
+          25,
+          28
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 93,
+        "span": 19
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          2,
+          3,
+          13,
+          18
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 37,
+        "span": 17
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:35.594425",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          3,
+          9,
+          20
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 35,
+        "span": 19
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          8,
+          9,
+          26
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 47,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          7,
+          9,
+          24,
+          27
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 69,
+        "span": 25
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          7,
+          20,
+          29,
+          31
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 89,
+        "span": 29
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:36.343251",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          9,
+          25,
+          32,
+          33
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 104,
+        "span": 28
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          9,
+          28,
+          29
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          13,
+          25,
+          30
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 29
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          8,
+          13,
+          30,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 84,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:37.501876",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          4,
+          7,
+          8,
+          21,
+          27
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 23
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          22,
+          25,
+          27
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 79,
+        "span": 26
+      },
+      {
+        "idx": 3,
+        "front": [
+          5,
+          7,
+          8,
+          29,
+          34
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 83,
+        "span": 29
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          16,
+          18,
+          32
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:39.332092",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          3,
+          5,
+          20,
+          21
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 50,
+        "span": 20
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          5,
+          8,
+          32
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 49,
+        "span": 31
+      },
+      {
+        "idx": 3,
+        "front": [
+          5,
+          7,
+          8,
+          15,
+          32
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 67,
+        "span": 27
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          3,
+          18,
+          20,
+          32
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 75,
+        "span": 30
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:40.555726",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          3,
+          8,
+          18,
+          21
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 52,
+        "span": 19
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          7,
+          18,
+          27,
+          28
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 82,
+        "span": 26
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          18,
+          20,
+          25
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 70,
+        "span": 23
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          3,
+          7,
+          13,
+          27
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 52,
+        "span": 25
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:47:41.380622",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          7,
+          18,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 82,
+        "span": 26
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          7,
+          25,
+          29
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 70,
+        "span": 25
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          7,
+          14,
+          20,
+          29
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 28
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          11,
+          18,
+          32
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 30
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:57.235276",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          7,
+          9,
+          19,
+          20,
+          25
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 80,
+        "span": 18
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          4,
+          7,
+          13,
+          25
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 52,
+        "span": 22
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          9,
+          12,
+          32,
+          34
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 88,
+        "span": 33
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          8,
+          9,
+          13
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 0,
+        "small_count": 5,
+        "sum": 36,
+        "span": 11
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:58.019663",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          8,
+          18,
+          26,
+          32
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 0,
+        "even_count": 5,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 86,
+        "span": 30
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          5,
+          7,
+          10,
+          32
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 56,
+        "span": 30
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          7,
+          20,
+          32
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 62,
+        "span": 31
+      },
+      {
+        "idx": 4,
+        "front": [
+          7,
+          9,
+          17,
+          20,
+          27
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 80,
+        "span": 20
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:58.523128",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          9,
+          13,
+          18,
+          29
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 70,
+        "span": 28
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          5,
+          10,
+          18,
+          32
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 30
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          5,
+          9,
+          25,
+          28
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 68,
+        "span": 27
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          2,
+          5,
+          31,
+          32
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:58.864206",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          9,
+          18,
+          25,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 107,
+        "span": 19
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          8,
+          25,
+          27
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 65,
+        "span": 26
+      },
+      {
+        "idx": 3,
+        "front": [
+          10,
+          18,
+          23,
+          25,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 108,
+        "span": 22
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          8,
+          20,
+          28,
+          31
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 88,
+        "span": 30
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:59.291646",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          5,
+          24,
+          29,
+          33
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 93,
+        "span": 31
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          3,
+          9,
+          20,
+          25
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 59,
+        "span": 23
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          3,
+          4,
+          8
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 0,
+        "small_count": 5,
+        "sum": 18,
+        "span": 7
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          9,
+          18,
+          32
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 64,
+        "span": 31
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:59.500930",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          3,
+          20,
+          25,
+          32
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 82,
+        "span": 30
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          5,
+          9,
+          18,
+          20
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 53,
+        "span": 19
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          27,
+          28,
+          32
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 30
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          5,
+          18,
+          20
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 49,
+        "span": 18
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:58:59.672618",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          4,
+          8,
+          13,
+          25
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 52,
+        "span": 23
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          17,
+          18,
+          32
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 72,
+        "span": 31
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          5,
+          9,
+          25,
+          27
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 70,
+        "span": 23
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          2,
+          9,
+          18,
+          28
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 58,
+        "span": 27
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T16:59:52.565382",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          3,
+          8,
+          11,
+          18,
+          25
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 65,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          17,
+          23,
+          28
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          13,
+          18,
+          20,
+          24
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 76,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          8,
+          23,
+          25
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 62,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:06.106478",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          7,
+          26,
+          27,
+          29
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          3,
+          18,
+          20
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 44,
+        "span": 19,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          8,
+          13,
+          21
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 45,
+        "span": 20,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          12,
+          18,
+          20,
+          30
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 0,
+        "even_count": 5,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 88,
+        "span": 22,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:31.941595",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          18,
+          29,
+          35
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 88,
+        "span": 34,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          8,
+          15,
+          25
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 53,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          5,
+          7,
+          15,
+          25,
+          32
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 84,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          9,
+          18,
+          27,
+          29
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 88,
+        "span": 24,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:32.511534",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          22,
+          25,
+          27,
+          32
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 108,
+        "span": 30,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          18,
+          20,
+          28
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 70,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          7,
+          8,
+          25,
+          27,
+          29
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 96,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          5,
+          7,
+          13,
+          28
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 55,
+        "span": 26,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:32.889699",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          4,
+          7,
+          11,
+          25
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 49,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          3,
+          9,
+          28
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 43,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          9,
+          15,
+          18,
+          29
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 25,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          7,
+          18,
+          20,
+          25
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 72,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:33.295815",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          3,
+          5,
+          25,
+          29
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 63,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          25,
+          32,
+          33
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 93,
+        "span": 32,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          8,
+          18,
+          26,
+          28
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 0,
+        "even_count": 5,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 82,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          9,
+          16,
+          27,
+          28
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 88,
+        "span": 20,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:33.469068",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          5,
+          9,
+          13
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 0,
+        "small_count": 5,
+        "sum": 30,
+        "span": 12,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          10,
+          20,
+          25,
+          29
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 86,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          18,
+          19,
+          22,
+          28
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 88,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          13,
+          18,
+          28,
+          35
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 99,
+        "span": 30,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:33.645293",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          4,
+          7,
+          32
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 46,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          8,
+          13,
+          25,
+          30
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 79,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          4,
+          18,
+          25,
+          29
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 78,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          3,
+          8,
+          28,
+          30
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 28,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:33.807304",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          4,
+          8,
+          9,
+          18,
+          33
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 72,
+        "span": 29,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          8,
+          15,
+          18,
+          29
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 77,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          3,
+          8,
+          25,
+          29
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 66,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          7,
+          8,
+          13,
+          32
+        ],
+        "back": [
+          2,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 65,
+        "span": 27,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:33.979856",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          7,
+          9,
+          27,
+          29
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 73,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          9,
+          24,
+          25
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 63,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          3,
+          8,
+          13,
+          18
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 44,
+        "span": 16,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          9,
+          11,
+          17,
+          25,
+          28
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 90,
+        "span": 19,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:34.153807",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          9,
+          13,
+          18,
+          28
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 73,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          5,
+          10,
+          13,
+          18
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 49,
+        "span": 15,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          6,
+          11,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 64,
+        "span": 21,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          9,
+          20,
+          25,
+          27,
+          33
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 114,
+        "span": 24,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:34.319283",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          3,
+          8,
+          19,
+          25,
+          29
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 84,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          6,
+          8,
+          9,
+          14,
+          28
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 65,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          7,
+          18,
+          25,
+          27,
+          28
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 105,
+        "span": 21,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          7,
+          8,
+          13,
+          22
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 55,
+        "span": 17,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:34.506780",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          7,
+          24,
+          32
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 66,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          3,
+          5,
+          8,
+          27
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 45,
+        "span": 25,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          5,
+          7,
+          18,
+          20,
+          32
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 82,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          9,
+          13,
+          25,
+          28
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 83,
+        "span": 20,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:35.004663",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          3,
+          5,
+          9,
+          14,
+          25
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 56,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          7,
+          8,
+          18,
+          32
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 68,
+        "span": 29,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          6,
+          18,
+          19,
+          25,
+          32
+        ],
+        "back": [
+          2,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 100,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          5,
+          9,
+          27,
+          29
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 28,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:35.224832",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          8,
+          19,
+          28,
+          29
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 85,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          2,
+          4,
+          9,
+          28
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 44,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          7,
+          17,
+          27,
+          28
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 81,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          3,
+          7,
+          27,
+          28
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 66,
+        "span": 27,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:00:35.939992",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          9,
+          25,
+          28,
+          29,
+          33
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 124,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          9,
+          15,
+          20,
+          25,
+          29
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 98,
+        "span": 20,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          8,
+          27,
+          29
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          7,
+          25,
+          26,
+          28,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 118,
+        "span": 25,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          9,
+          25,
+          28,
+          29,
+          33
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          9,
+          15,
+          20,
+          25,
+          29
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          8,
+          27,
+          29
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "hit_front": 2,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          7,
+          25,
+          26,
+          28,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25030",
+      "front": [
+        2,
+        8,
+        14,
+        21,
+        30
+      ],
+      "back": [
+        5,
+        10
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:00:36.585124",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          7,
+          18,
+          20,
+          28
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 75,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          8,
+          13,
+          20,
+          32
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 74,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          7,
+          25,
+          29,
+          32,
+          35
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 128,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          7,
+          8,
+          19,
+          27
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 65,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          7,
+          18,
+          20,
+          28
+        ],
+        "back": [
+          8,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          8,
+          13,
+          20,
+          32
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          7,
+          25,
+          29,
+          32,
+          35
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          7,
+          8,
+          19,
+          27
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25030",
+      "front": [
+        9,
+        12,
+        18,
+        24,
+        27
+      ],
+      "back": [
+        3,
+        10
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:00:37.548105",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          18,
+          29,
+          32
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 85,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          7,
+          20,
+          25
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 61,
+        "span": 21,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          5,
+          7,
+          20,
+          30
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 63,
+        "span": 29,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          8,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 56,
+        "span": 24,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          18,
+          29,
+          32
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "hit_front": 1,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          4,
+          5,
+          7,
+          20,
+          25
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          5,
+          7,
+          20,
+          30
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          4,
+          8,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:00:40.260588",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          4,
+          20,
+          35
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 62,
+        "span": 34,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          5,
+          7,
+          9,
+          29
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 5,
+        "even_count": 0,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 51,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          3,
+          8,
+          13,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          19,
+          20,
+          21,
+          25
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 93,
+        "span": 17,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          4,
+          20,
+          35
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          5,
+          7,
+          9,
+          29
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          3,
+          8,
+          13,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          8,
+          19,
+          20,
+          21,
+          25
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:00:47.407529",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          3,
+          18,
+          20,
+          25
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 68,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          8,
+          9,
+          15,
+          27
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 66,
+        "span": 20,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          3,
+          7,
+          15,
+          25
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 52,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          9,
+          18,
+          25,
+          27
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          3,
+          18,
+          20,
+          25
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "hit_front": 1,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          8,
+          9,
+          15,
+          27
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          3,
+          7,
+          15,
+          25
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          4,
+          9,
+          18,
+          25,
+          27
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25001",
+      "front": [
+        1,
+        3,
+        5,
+        7,
+        11
+      ],
+      "back": [
+        2,
+        4
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:24:53.846241",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          4,
+          5,
+          9,
+          18,
+          20
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 56,
+        "span": 16,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          9,
+          21,
+          22,
+          28
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 87,
+        "span": 21,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          7,
+          16,
+          18,
+          22
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 18,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          5,
+          9,
+          27,
+          35
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 78,
+        "span": 33,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          5,
+          7,
+          9,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 76,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          4,
+          5,
+          9,
+          18,
+          20
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          9,
+          21,
+          22,
+          28
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "hit_front": 1,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          7,
+          16,
+          18,
+          22
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          5,
+          9,
+          27,
+          35
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          5,
+          7,
+          9,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:25:07.189965",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          7,
+          9,
+          26,
+          29
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 72,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          13,
+          17,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 76,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          4,
+          5,
+          7,
+          33
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 51,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          5,
+          9,
+          18
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 38,
+        "span": 16,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          4,
+          12,
+          18,
+          32
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 0,
+        "even_count": 5,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 68,
+        "span": 30,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          7,
+          9,
+          26,
+          29
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "hit_front": 2,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          3,
+          13,
+          17,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          4,
+          5,
+          7,
+          33
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          4,
+          5,
+          9,
+          18
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          4,
+          12,
+          18,
+          32
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25009",
+      "front": [
+        2,
+        9,
+        17,
+        24,
+        29
+      ],
+      "back": [
+        1,
+        11
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:44:09.168010",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          4,
+          8,
+          18,
+          20
+        ],
+        "back": [
+          3,
+          9
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 51,
+        "span": 19,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          9,
+          14,
+          20
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 47,
+        "span": 19,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          4,
+          5,
+          9,
+          25,
+          28
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          7,
+          9,
+          11,
+          32
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 61,
+        "span": 30,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          1,
+          2,
+          3,
+          13,
+          23
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 42,
+        "span": 22,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:44:09.910286",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          5,
+          28,
+          29
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 65,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          4,
+          18,
+          27,
+          32
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 30,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          8,
+          13,
+          25,
+          28
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          7,
+          13,
+          15,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 72,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          8,
+          9,
+          23,
+          25,
+          29
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 94,
+        "span": 21,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          2,
+          5,
+          28,
+          29
+        ],
+        "back": [
+          2,
+          8
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          2,
+          4,
+          18,
+          27,
+          32
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          8,
+          13,
+          25,
+          28
+        ],
+        "back": [
+          6,
+          8
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          7,
+          13,
+          15,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          8,
+          9,
+          23,
+          25,
+          29
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 1,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "25030",
+      "front": [
+        2,
+        8,
+        14,
+        21,
+        30
+      ],
+      "back": [
+        5,
+        10
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:49:08.847189",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          4,
+          5,
+          7,
+          29,
+          30
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 75,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          8,
+          20,
+          25,
+          27
+        ],
+        "back": [
+          9,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 81,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          2,
+          9,
+          26,
+          28
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 66,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          2,
+          8,
+          15,
+          29
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 55,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          3,
+          4,
+          18,
+          25
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 52,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:49:09.660407",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          5,
+          8,
+          9,
+          13,
+          28
+        ],
+        "back": [
+          5,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 63,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          6,
+          8,
+          13,
+          27
+        ],
+        "back": [
+          3,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 55,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          8,
+          9,
+          13,
+          20,
+          21
+        ],
+        "back": [
+          3,
+          12
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 71,
+        "span": 13,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          1,
+          5,
+          9,
+          17,
+          28
+        ],
+        "back": [
+          1,
+          3
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 60,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          1,
+          2,
+          15,
+          22,
+          27
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 67,
+        "span": 26,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:49:10.192970",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          3,
+          5,
+          13,
+          18
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 41,
+        "span": 16,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          4,
+          8,
+          13,
+          24
+        ],
+        "back": [
+          2,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 50,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          7,
+          13,
+          28,
+          31
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 81,
+        "span": 29,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          2,
+          3,
+          5,
+          25,
+          26
+        ],
+        "back": [
+          6,
+          9
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 61,
+        "span": 24,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          4,
+          5,
+          9,
+          18,
+          20
+        ],
+        "back": [
+          5,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 56,
+        "span": 16,
+        "history_match": []
+      }
+    ],
+    "review": null,
+    "actual": null
+  },
+  {
+    "generated_at": "2026-08-19T17:49:13.926603",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          3,
+          4,
+          7,
+          28
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 43,
+        "span": 27,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          8,
+          9,
+          18,
+          21,
+          29
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 85,
+        "span": 21,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          8,
+          18,
+          28
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "odd_count": 1,
+        "even_count": 4,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 61,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          8,
+          10,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 78,
+        "span": 23,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          4,
+          7,
+          20,
+          25
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 58,
+        "span": 23,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          3,
+          4,
+          7,
+          28
+        ],
+        "back": [
+          6,
+          11
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          8,
+          9,
+          18,
+          21,
+          29
+        ],
+        "back": [
+          1,
+          8
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          2,
+          5,
+          8,
+          18,
+          28
+        ],
+        "back": [
+          1,
+          9
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          5,
+          8,
+          10,
+          27,
+          28
+        ],
+        "back": [
+          3,
+          6
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          4,
+          7,
+          20,
+          25
+        ],
+        "back": [
+          3,
+          5
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "26107",
+      "front": [
+        2,
+        5,
+        7,
+        14,
+        22
+      ],
+      "back": [
+        4,
+        10
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-19T17:49:14.808655",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          13,
+          30,
+          31
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 80,
+        "span": 30,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          8,
+          18,
+          31
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 61,
+        "span": 30,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          5,
+          20,
+          25,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 3,
+        "small_count": 2,
+        "sum": 83,
+        "span": 31,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          9,
+          18,
+          25,
+          27,
+          35
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 114,
+        "span": 26,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          5,
+          9,
+          14,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 62,
+        "span": 30,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          1,
+          5,
+          13,
+          30,
+          31
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          1,
+          3,
+          8,
+          18,
+          31
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          1,
+          5,
+          20,
+          25,
+          32
+        ],
+        "back": [
+          2,
+          3
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          9,
+          18,
+          25,
+          27,
+          35
+        ],
+        "back": [
+          1,
+          11
+        ],
+        "hit_front": 0,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          2,
+          5,
+          9,
+          14,
+          32
+        ],
+        "back": [
+          11,
+          12
+        ],
+        "hit_front": 2,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "26094",
+      "front": [
+        5,
+        14,
+        15,
+        17,
+        33
+      ],
+      "back": [
+        1,
+        7
+      ]
+    }
+  },
+  {
+    "generated_at": "2026-08-20T00:04:45.036030",
+    "predictions": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          10,
+          13,
+          16,
+          35
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "odd_count": 2,
+        "even_count": 3,
+        "big_count": 1,
+        "small_count": 4,
+        "sum": 76,
+        "span": 33,
+        "history_match": []
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          19,
+          24,
+          31,
+          35
+        ],
+        "back": [
+          5,
+          8
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 4,
+        "small_count": 1,
+        "sum": 116,
+        "span": 28,
+        "history_match": []
+      },
+      {
+        "idx": 3,
+        "front": [
+          9,
+          10,
+          13,
+          21,
+          31
+        ],
+        "back": [
+          1,
+          4
+        ],
+        "odd_count": 4,
+        "even_count": 1,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 84,
+        "span": 22,
+        "history_match": []
+      },
+      {
+        "idx": 4,
+        "front": [
+          6,
+          13,
+          17,
+          26,
+          31
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 93,
+        "span": 25,
+        "history_match": []
+      },
+      {
+        "idx": 5,
+        "front": [
+          10,
+          13,
+          17,
+          26,
+          29
+        ],
+        "back": [
+          4,
+          5
+        ],
+        "odd_count": 3,
+        "even_count": 2,
+        "big_count": 2,
+        "small_count": 3,
+        "sum": 95,
+        "span": 19,
+        "history_match": []
+      }
+    ],
+    "review": [
+      {
+        "idx": 1,
+        "front": [
+          2,
+          10,
+          13,
+          16,
+          35
+        ],
+        "back": [
+          1,
+          5
+        ],
+        "hit_front": 0,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 2,
+        "front": [
+          7,
+          19,
+          24,
+          31,
+          35
+        ],
+        "back": [
+          5,
+          8
+        ],
+        "hit_front": 0,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 3,
+        "front": [
+          9,
+          10,
+          13,
+          21,
+          31
+        ],
+        "back": [
+          1,
+          4
+        ],
+        "hit_front": 0,
+        "hit_back": 1,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 4,
+        "front": [
+          6,
+          13,
+          17,
+          26,
+          31
+        ],
+        "back": [
+          3,
+          11
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      },
+      {
+        "idx": 5,
+        "front": [
+          10,
+          13,
+          17,
+          26,
+          29
+        ],
+        "back": [
+          4,
+          5
+        ],
+        "hit_front": 1,
+        "hit_back": 0,
+        "prize": "未中奖"
+      }
+    ],
+    "actual": {
+      "period": "26094",
+      "front": [
+        5,
+        14,
+        15,
+        17,
+        33
+      ],
+      "back": [
+        1,
+        7
+      ]
+    }
+  }
+]
